@@ -1,0 +1,141 @@
+{
+  "project": {
+    "name": "sub2api",
+    "scope": "repo-local-service"
+  },
+  "repoRole": {
+    "type": "ai-api-gateway-platform",
+    "isSourceOfTruth": true,
+    "deliveryModel": "repo-managed-build-and-deploy"
+  },
+  "paths": {
+    "repoRoot": "E:\\My Project\\sub2api",
+    "readmePath": "E:\\My Project\\sub2api\\README.md",
+    "devGuidePath": "E:\\My Project\\sub2api\\DEV_GUIDE.md",
+    "deployRoot": "E:\\My Project\\sub2api\\deploy"
+  },
+  "git": {
+    "provider": "github",
+    "remote": "https://github.com/Wei-Shaw/sub2api.git",
+    "defaultBranch": "main"
+  },
+  "runtime": {
+    "primaryPort": 8080,
+    "buildCommand": "make build",
+    "testCommand": "make test",
+    "deploymentModes": [
+      "script-install",
+      "docker-compose"
+    ],
+    "composeFiles": [
+      "deploy/docker-compose.yml",
+      "deploy/docker-compose.standalone.yml",
+      "deploy/docker-compose.local.yml",
+      "deploy/docker-compose.dev.yml"
+    ]
+  },
+  "documentation": {
+    "humanReadme": "README.md",
+    "primaryLanguage": "zh-CN",
+    "notes": [
+      "README.md is the sole canonical human-facing project guide in Chinese.",
+      "project.json records repo-local operational contracts that should stay aligned with README.md.",
+      "Live tokens, callback URLs containing tokens, and human passwords must never be committed."
+    ]
+  },
+  "operationalPlaybooks": {
+    "openaiOAuthAccountImport": {
+      "purpose": "document the canonical import and validation contract for OpenAI OAuth accounts",
+      "importRoute": {
+        "method": "POST",
+        "path": "/api/v1/admin/accounts/data",
+        "payloadRoot": "data",
+        "acceptedTypeValues": [
+          "sub2api-data",
+          "sub2api-bundle",
+          ""
+        ],
+        "acceptedVersion": 1,
+        "requiredArrays": [
+          "proxies",
+          "accounts"
+        ]
+      },
+      "minimumAccountFields": [
+        "name",
+        "platform",
+        "type",
+        "credentials"
+      ],
+      "openaiOAuthContract": {
+        "platform": "openai",
+        "type": "oauth",
+        "requiredCredentialBundle": [
+          "access_token",
+          "refresh_token",
+          "id_token"
+        ],
+        "optionalCredentialFields": [
+          "email",
+          "plan_type",
+          "chatgpt_account_id",
+          "chatgpt_user_id",
+          "organization_id"
+        ],
+        "recommendedExtraFields": [
+          "privacy_mode"
+        ],
+        "optionalAccountFields": [
+          "notes",
+          "extra",
+          "proxy_key",
+          "concurrency",
+          "priority",
+          "rate_multiplier",
+          "expires_at",
+          "auto_pause_on_expired"
+        ]
+      },
+      "parsingRules": [
+        "Treat a single OAuth login event as one indivisible token batch.",
+        "Reject mixed token bundles even if individual tokens appear valid.",
+        "Use decoded id_token claims as the source of truth for OpenAI account identity metadata.",
+        "If email, plan_type, chatgpt_account_id, chatgpt_user_id, or organization_id are omitted, import may backfill them from id_token.",
+        "If those fields are supplied explicitly, they should match the decoded id_token claims.",
+        "Do not use a human password or bare email address as the OpenAI OAuth import credential."
+      ],
+      "validationWorkflow": [
+        "write or import the account with one internally consistent token bundle",
+        "run POST /api/v1/admin/accounts/:id/test",
+        "require a real successful upstream response before treating the account as healthy",
+        "if a stale Fail state remains, run POST /api/v1/admin/accounts/:id/clear-error"
+      ],
+      "knownFailurePatterns": [
+        "Mismatched id_token and access_token from different login batches cause false repair loops.",
+        "A previous Fail state can persist visually until clear-error is called after a successful retest."
+      ],
+      "implementationRefs": [
+        "backend/internal/handler/admin/account_data.go",
+        "backend/internal/pkg/openai/oauth.go",
+        "frontend/src/composables/useOpenAIOAuth.ts"
+      ],
+      "secretHandling": {
+        "allowTrackedSecrets": false,
+        "forbiddenInRepo": [
+          "live access_token",
+          "live refresh_token",
+          "live id_token",
+          "callback URLs containing tokens",
+          "human passwords"
+        ]
+      }
+    }
+  },
+  "verification": {
+    "requiredEvidence": [
+      "project.json remains valid JSON",
+      "README.md and project.json describe the same import contract",
+      "no plaintext secrets are introduced into tracked files"
+    ]
+  }
+}
