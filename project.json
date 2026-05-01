@@ -1,4 +1,21 @@
 {
+  "projectName": "sub2api",
+  "canonicalDoc": "README.md",
+  "machineReadableEntry": "project.json",
+  "localSourceRoot": "E:\\My Project\\sub2api",
+  "owningWorkspaceRoot": "E:\\My Project",
+  "projectType": "ai-api-gateway-platform",
+  "status": "active",
+  "deliveryMode": "server-https-live",
+  "currentPhase": "public-domain-live-on-170",
+  "publicBaseUrl": "https://sub2api.tengokukk.com/",
+  "publicHealthUrl": "https://sub2api.tengokukk.com/health",
+  "chosenPublicHost": "sub2api.tengokukk.com",
+  "publicNginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
+  "serverHost": "170.106.179.226",
+  "serverRuntimeRoot": "/srv/sub2api",
+  "runtimeStack": "docker-compose",
+  "tlsLivePath": "/etc/letsencrypt/live/sub2api.tengokukk.com",
   "project": {
     "name": "sub2api",
     "scope": "repo-local-service"
@@ -17,15 +34,26 @@
   "git": {
     "provider": "github",
     "remote": "https://github.com/Wei-Shaw/sub2api.git",
-    "defaultBranch": "main"
+    "defaultBranch": "main",
+    "forkRemote": "https://github.com/emptyinkpot/sub2api.git",
+    "defaultPushRemote": "origin",
+    "upstreamRemote": "upstream"
   },
   "runtime": {
     "primaryPort": 8080,
     "buildCommand": "make build",
     "testCommand": "make test",
+    "publicHostPort": 80,
+    "publicTlsPort": 443,
+    "healthPath": "/health",
     "deploymentModes": [
       "script-install",
       "docker-compose"
+    ],
+    "containerNames": [
+      "sub2api",
+      "sub2api-postgres",
+      "sub2api-redis"
     ],
     "composeFiles": [
       "deploy/docker-compose.yml",
@@ -40,8 +68,36 @@
     "notes": [
       "README.md is the sole canonical human-facing project guide in Chinese.",
       "project.json records repo-local operational contracts that should stay aligned with README.md.",
+      "This project now has a live public domain on the 170 server: https://sub2api.tengokukk.com/.",
       "Live tokens, callback URLs containing tokens, and human passwords must never be committed."
     ]
+  },
+  "publicIngress": {
+    "host": "sub2api.tengokukk.com",
+    "baseUrl": "https://sub2api.tengokukk.com/",
+    "healthUrl": "https://sub2api.tengokukk.com/health",
+    "serverHost": "170.106.179.226",
+    "nginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
+    "tlsLivePath": "/etc/letsencrypt/live/sub2api.tengokukk.com",
+    "proxyTarget": "http://127.0.0.1:8080",
+    "bootstrapMode": "https-live",
+    "activatedAt": "2026-05-01"
+  },
+  "dnsPlan": {
+    "mode": "tengokukk-shared-apex-dedicated-subdomain",
+    "host": "sub2api.tengokukk.com",
+    "type": "A",
+    "value": "170.106.179.226",
+    "provider": "DNSPod",
+    "status": "active-as-of-2026-05-01"
+  },
+  "currentVerification": {
+    "publicDns": "passed",
+    "publicHttpBootstrap": "passed-via-nginx-host-header-and-public-resolve",
+    "publicHttpsHome": "passed",
+    "publicHealthGet": "passed",
+    "tlsCertificate": "passed",
+    "verifiedAt": "2026-05-01"
   },
   "operationalPlaybooks": {
     "openaiOAuthAccountImport": {
@@ -131,10 +187,26 @@
       }
     }
   },
+  "remoteBootstrapState": {
+    "serverHost": "170.106.179.226",
+    "runtimeRoot": "/srv/sub2api",
+    "containerNames": [
+      "sub2api",
+      "sub2api-postgres",
+      "sub2api-redis"
+    ],
+    "publicHost": "sub2api.tengokukk.com",
+    "nginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
+    "bootstrapMode": "final-https-live",
+    "bootstrapAppliedAt": "2026-05-01",
+    "publicDns": "ready",
+    "tls": "ready"
+  },
   "verification": {
     "requiredEvidence": [
       "project.json remains valid JSON",
       "README.md and project.json describe the same import contract",
+      "README.md and project.json agree on the live host sub2api.tengokukk.com",
       "no plaintext secrets are introduced into tracked files"
     ]
   }

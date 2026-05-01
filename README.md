@@ -1,5 +1,10 @@
 # Sub2API
 
+---
+title: sub2api
+status: canonical
+---
+
 <div align="center">
 
 [![Go](https://img.shields.io/badge/Go-1.25.7-00ADD8.svg)](https://golang.org/)
@@ -17,6 +22,52 @@
 > **Sub2API 官方仅使用  `sub2api.org` 与 `pincc.ai` 两个域名。其他使用 Sub2API 名义的网站可能为第三方部署或服务，与本项目无关，请自行甄别。**
 ---
 
+## 项目说明入口
+
+```yaml
+projectName: sub2api
+canonicalDoc: README.md
+machineReadableEntry: project.json
+localSourceRoot: E:\My Project\sub2api
+owningWorkspaceRoot: E:\My Project
+projectType: ai api gateway platform
+projectStatus: active
+currentDeliveryMode: server-https-live
+currentPhase: public-domain-live-on-170
+publicBaseUrl: https://sub2api.tengokukk.com/
+publicHealthUrl: https://sub2api.tengokukk.com/health
+chosenPublicHost: sub2api.tengokukk.com
+serverHost: 170.106.179.226
+serverRuntimeRoot: /srv/sub2api
+runtimeMode: docker-compose
+nginxSite: /etc/nginx/sites-enabled/sub2api.tengokukk.com
+githubUpstream: https://github.com/Wei-Shaw/sub2api.git
+githubFork: https://github.com/emptyinkpot/sub2api.git
+defaultPushRemote: origin
+```
+
+- 人类优先读取 `README.md`；机器优先读取 `project.json`。
+- 当前这份 README 同时承担项目介绍、当前公网部署说明、以及账号导入规范入口。
+- 当前已验证的自托管公网入口为 `https://sub2api.tengokukk.com/`，健康检查入口为 `GET https://sub2api.tengokukk.com/health`。
+
+## 当前运行信息卡
+
+| 项目 | 值 |
+| --- | --- |
+| 当前目录 | `E:\My Project\sub2api` |
+| 所属工作区根 | `E:\My Project` |
+| 当前机器可读入口 | `project.json` |
+| 当前公网主入口 | `https://sub2api.tengokukk.com/` |
+| 当前公网健康检查 | `https://sub2api.tengokukk.com/health` |
+| 当前选定域名 | `sub2api.tengokukk.com` |
+| 当前服务器 | `170.106.179.226` |
+| 当前服务器运行根 | `/srv/sub2api` |
+| 当前部署方式 | `docker-compose` |
+| 当前 nginx site | `/etc/nginx/sites-enabled/sub2api.tengokukk.com` |
+| 当前证书目录 | `/etc/letsencrypt/live/sub2api.tengokukk.com/` |
+| 当前 GitHub 上游 | `https://github.com/Wei-Shaw/sub2api.git` |
+| 当前 GitHub fork | `https://github.com/emptyinkpot/sub2api.git` |
+
 ## 在线体验
 
 体验地址：**[https://demo.sub2api.org/](https://demo.sub2api.org/)**
@@ -30,6 +81,13 @@
 ## 项目概述
 
 Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
+
+### 当前自托管公网状态
+
+- 当前 170 服务器公网入口：`https://sub2api.tengokukk.com/`
+- 当前公网健康检查：`GET https://sub2api.tengokukk.com/health -> 200`
+- 当前 DNS：`sub2api.tengokukk.com -> 170.106.179.226`
+- 当前 TLS：Let's Encrypt 证书已签发到 `/etc/letsencrypt/live/sub2api.tengokukk.com/`
 
 ## 核心功能
 
