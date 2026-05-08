@@ -111,6 +111,19 @@
           </button>
           <button
             type="button"
+            @click="form.platform = 'glm'; accountCategory = 'apikey'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'glm'
+                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <Icon name="cpu" size="sm" />
+            GLM
+          </button>
+          <button
+            type="button"
             @click="form.platform = 'gemini'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -1019,6 +1032,8 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'https://api.openai.com'
+                : form.platform === 'glm'
+                  ? 'https://open.bigmodel.cn/api/paas/v4'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : 'https://api.anthropic.com'
@@ -1036,6 +1051,8 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'sk-proj-...'
+                : form.platform === 'glm'
+                  ? 'your-glm-or-compatible-token'
                 : form.platform === 'gemini'
                   ? 'AIza...'
                   : 'sk-ant-...'
@@ -3169,12 +3186,14 @@ const oauthStepTitle = computed(() => {
 // Platform-specific hints for API Key type
 const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
+  if (form.platform === 'glm') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   return t('admin.accounts.baseUrlHint')
 })
 
 const apiKeyHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
+  if (form.platform === 'glm') return t('admin.accounts.openai.apiKeyHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
   return t('admin.accounts.apiKeyHint')
 })
@@ -3596,6 +3615,8 @@ watch(
     apiKeyBaseUrl.value =
       (newPlatform === 'openai')
         ? 'https://api.openai.com'
+        : newPlatform === 'glm'
+          ? 'https://open.bigmodel.cn/api/paas/v4'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3622,6 +3643,9 @@ watch(
     }
     if (newPlatform !== 'anthropic' && accountCategory.value === 'bedrock') {
       accountCategory.value = 'oauth-based'
+    }
+    if (newPlatform === 'glm') {
+      accountCategory.value = 'apikey'
     }
     // Reset Bedrock fields when switching platforms
     bedrockAccessKeyId.value = ''
@@ -4385,6 +4409,8 @@ const handleSubmit = async () => {
   const defaultBaseUrl =
     form.platform === 'openai'
       ? 'https://api.openai.com'
+      : form.platform === 'glm'
+        ? 'https://open.bigmodel.cn/api/paas/v4'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com'
