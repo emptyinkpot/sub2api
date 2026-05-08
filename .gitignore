@@ -79,6 +79,7 @@ Desktop.ini
 # ===================
 tmp/
 temp/
+.tmp-*
 *.tmp
 *.temp
 *.log
