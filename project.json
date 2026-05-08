@@ -5,6 +5,61 @@
   "localSourceRoot": "E:\\My Project\\sub2api",
   "owningWorkspaceRoot": "E:\\My Project",
   "projectType": "ai-api-gateway-platform",
+  "positioning": {
+    "current": "AI API Gateway with Account Pool & Billing",
+    "currentChinese": "带账号池和计费能力的 AI API 中转网关",
+    "boundary": "Sub2API is currently a professional AI API gateway/proxy platform, not a full Agent Runtime or Workflow Runtime.",
+    "primaryCapabilities": [
+      "api forwarding and protocol compatibility",
+      "upstream account pool management",
+      "user API keys and access control",
+      "token usage, quota, billing, and payment",
+      "basic scheduling, retry, concurrency, and rate limiting",
+      "admin console and basic operations views"
+    ],
+    "notCurrentCapabilities": [
+      "agent runtime",
+      "workflow runtime",
+      "tool execution layer",
+      "semantic runtime memory",
+      "full trace graph"
+    ]
+  },
+  "roadmap": {
+    "p0": {
+      "name": "runtime observability for gateway operations",
+      "designDoc": "docs/PROVIDER_RUNTIME_DASHBOARD_CN.md",
+      "items": [
+        "provider and account health",
+        "request latency, failure rate, and retry count",
+        "token throughput, cost, and quota analytics",
+        "account health score",
+        "error taxonomy and request trace logs",
+        "fallback and retry visibility"
+      ]
+    },
+    "p1": {
+      "name": "gateway routing",
+      "items": [
+        "model registry",
+        "provider registry",
+        "weighted routing",
+        "quota-aware routing",
+        "account affinity",
+        "fallback chain"
+      ]
+    },
+    "p2": {
+      "name": "runtime-adjacent gateway features",
+      "items": [
+        "sticky session",
+        "session budget",
+        "request replay",
+        "semantic cache",
+        "tool-call pass-through"
+      ]
+    }
+  },
   "status": "active",
   "deliveryMode": "server-https-live",
   "currentPhase": "public-domain-live-on-170",

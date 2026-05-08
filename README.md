@@ -82,6 +82,57 @@ defaultPushRemote: origin
 
 Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
 
+### 当前定位边界
+
+Sub2API 当前首先是一个**专业级 AI API 中转网关**，核心问题是把上游账号、模型、额度和用户请求稳定地组织起来，而不是宣称自己已经是完整的 Agent Runtime 或 Workflow Runtime。
+
+当前定位：
+
+```text
+AI API Gateway with Account Pool & Billing
+```
+
+也就是：
+
+- API 中转与协议兼容
+- 上游账号池管理
+- 用户 API Key 与权限控制
+- Token 用量、额度、计费与支付
+- 基础调度、重试、并发与速率限制
+- 管理后台与基础运营视图
+
+短期演进方向是把“中转站”做得更透明、更稳定、更可运营；长期可以向更强的 Gateway Platform 演进，但 `session runtime`、`workflow runtime`、`agent runtime`、`tool execution` 等能力在当前阶段不应作为既有能力描述。
+
+### 近期路线
+
+P0 是运行透明度和运营稳定性：
+
+- Provider / 账号健康状态
+- 请求延迟、失败率、重试次数
+- Token 吞吐、成本与额度消耗
+- Account Health Score
+- 错误分类与可追踪请求日志
+- Fallback / Retry 可视化
+
+P0 的实施设计见 [`docs/PROVIDER_RUNTIME_DASHBOARD_CN.md`](docs/PROVIDER_RUNTIME_DASHBOARD_CN.md)。
+
+P1 是网关调度能力：
+
+- Model Registry
+- Provider Registry
+- Weighted Routing
+- Quota-aware Routing
+- Account Affinity
+- Fallback Chain
+
+P2 才进入更接近 Runtime 的能力：
+
+- Sticky Session
+- Session Budget
+- Request Replay
+- Semantic Cache
+- Tool-call Pass-through
+
 ### 当前自托管公网状态
 
 - 当前 170 服务器公网入口：`https://sub2api.tengokukk.com/`
