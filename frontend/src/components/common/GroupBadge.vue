@@ -1,12 +1,12 @@
 <template>
   <span
     :class="[
-      'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
+      badgeBaseClass,
       badgeClass
     ]"
   >
     <!-- Platform logo -->
-    <PlatformIcon v-if="platform" :platform="platform" size="sm" />
+    <PlatformIcon v-if="platform" :platform="platform" :size="compact ? 'xs' : 'sm'" />
     <!-- Group name -->
     <span class="truncate">{{ name }}</span>
     <!-- Right side label -->
@@ -43,6 +43,7 @@ interface Props {
    * 只关心费率、不关心有效期的场景）。
    */
   alwaysShowRate?: boolean
+  compact?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -50,7 +51,8 @@ const props = withDefaults(defineProps<Props>(), {
   showRate: true,
   daysRemaining: null,
   userRateMultiplier: null,
-  alwaysShowRate: false
+  alwaysShowRate: false,
+  compact: false
 })
 
 const { t } = useI18n()
@@ -76,6 +78,12 @@ const showLabel = computed(() => {
   return props.rateMultiplier !== undefined || hasCustomRate.value
 })
 
+const badgeBaseClass = computed(() => {
+  return props.compact
+    ? 'inline-flex min-w-0 items-center gap-1 rounded-md px-1 py-px text-[10px] font-medium leading-tight transition-colors'
+    : 'inline-flex min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors'
+})
+
 // Label text
 const labelText = computed(() => {
   const rateLabel = props.rateMultiplier !== undefined ? `${props.rateMultiplier}x` : ''
@@ -95,7 +103,9 @@ const labelText = computed(() => {
 
 // Label style based on type and days remaining
 const labelClass = computed(() => {
-  const base = 'px-1.5 py-0.5 rounded text-[10px] font-semibold'
+  const base = props.compact
+    ? 'px-1 py-px rounded text-[9px] font-semibold leading-tight'
+    : 'px-1.5 py-0.5 rounded text-[10px] font-semibold'
 
   if (!isSubscription.value) {
     // Standard: subtle background (不再为专属倍率使用不同的背景色)

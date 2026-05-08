@@ -3,14 +3,31 @@ package routes
 import (
 	"net/http"
 
+	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterCommonRoutes 注册通用路由（健康检查、状态等）
-func RegisterCommonRoutes(r *gin.Engine) {
+func RegisterCommonRoutes(r *gin.Engine, h *handler.Handlers) {
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	r.GET("/health/deps", func(c *gin.Context) {
+		if h == nil || h.OpenAIGateway == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"openai_gateway_responses": gin.H{
+					"ok":      false,
+					"missing": []string{"handlers.openai_gateway"},
+				},
+			})
+			return
+		}
+		dep := h.OpenAIGateway.ResponsesDependenciesStatus()
+		c.JSON(http.StatusOK, gin.H{
+			"openai_gateway_responses": dep,
+		})
 	})
 
 	// Claude Code 遥测日志（忽略，直接返回200）

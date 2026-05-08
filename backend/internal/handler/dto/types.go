@@ -267,6 +267,7 @@ type Proxy struct {
 	Username  string    `json:"username"`
 	Password  string    `json:"-"`
 	Status    string    `json:"status"`
+	IPAddress string    `json:"ip_address,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

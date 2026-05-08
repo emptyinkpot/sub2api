@@ -1,4 +1,5 @@
 {
+  "$schema": "./templates/project-contract/project.schema.json",
   "projectName": "sub2api",
   "canonicalDoc": "README.md",
   "machineReadableEntry": "project.json",
@@ -15,15 +16,12 @@
   "serverHost": "170.106.179.226",
   "serverRuntimeRoot": "/srv/sub2api",
   "runtimeStack": "docker-compose",
+  "runtimeHotfixPolicy": "hot-reload-or-minimal-binary-replacement-first; do not default to docker build",
   "tlsLivePath": "/etc/letsencrypt/live/sub2api.tengokukk.com",
-  "project": {
-    "name": "sub2api",
-    "scope": "repo-local-service"
-  },
   "repoRole": {
     "type": "ai-api-gateway-platform",
     "isSourceOfTruth": true,
-    "deliveryModel": "repo-managed-build-and-deploy"
+    "deliveryModel": "repo-local-service"
   },
   "paths": {
     "repoRoot": "E:\\My Project\\sub2api",
@@ -43,9 +41,22 @@
     "primaryPort": 8080,
     "buildCommand": "make build",
     "testCommand": "make test",
-    "publicHostPort": 80,
-    "publicTlsPort": 443,
     "healthPath": "/health",
+    "dependencyHealthPath": "/health/deps",
+    "responsesEntrypoints": [
+      "/responses",
+      "/v1/responses"
+    ],
+    "nonPrimaryResponsesEntrypoints": [
+      "/openai/v1/responses"
+    ],
+    "liveContainerImage": {
+      "tag": "sub2api:local",
+      "hotfixImageId": "sha256:980925094c0ef0821641d9af5176e611a468034ad446575add2b9e04d6f5c872",
+      "backupTag": "sub2api:backup-before-healthdeps-20260502175334",
+      "committedAt": "2026-05-02T17:53:41+08:00",
+      "note": "The running container inspect image may show the old image ID after in-container binary replacement; verify live behavior with /health/deps and /responses logs."
+    },
     "deploymentModes": [
       "script-install",
       "docker-compose"
@@ -66,20 +77,33 @@
     "humanReadme": "README.md",
     "primaryLanguage": "zh-CN",
     "notes": [
-      "README.md is the sole canonical human-facing project guide in Chinese.",
-      "project.json records repo-local operational contracts that should stay aligned with README.md.",
-      "This project now has a live public domain on the 170 server: https://sub2api.tengokukk.com/.",
-      "Live tokens, callback URLs containing tokens, and human passwords must never be committed."
+      "README.md is the canonical human-facing project guide.",
+      "project.json is the machine-readable entry and should stay aligned with README.md.",
+      "Only the public production runtime at https://sub2api.tengokukk.com/ is maintained by this document and project.json.",
+      "Do not treat local Docker state at 127.0.0.1:8080 as the canonical runtime for accounts, channels, GLM/Coze configuration, or operational status.",
+      "This project is live on https://sub2api.tengokukk.com/ and serves the admin console from the same runtime.",
+      "Do not commit live tokens, callback URLs containing tokens, or human passwords.",
+      "Prefer POST /api/reload-config before POST /api/restart-service when fixing runtime config drift.",
+      "Use runtime-overrides.json for config changes that must take effect without code changes."
     ]
   },
   "publicIngress": {
     "host": "sub2api.tengokukk.com",
     "baseUrl": "https://sub2api.tengokukk.com/",
     "healthUrl": "https://sub2api.tengokukk.com/health",
+    "dependencyHealthUrl": "https://sub2api.tengokukk.com/health/deps",
     "serverHost": "170.106.179.226",
     "nginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
     "tlsLivePath": "/etc/letsencrypt/live/sub2api.tengokukk.com",
     "proxyTarget": "http://127.0.0.1:8080",
+    "staticRoot": "/srv/sub2api/deploy/data/public",
+    "proxiedPrefixes": [
+      "/v1/",
+      "/api/",
+      "/responses",
+      "/health",
+      "/health/"
+    ],
     "bootstrapMode": "https-live",
     "activatedAt": "2026-05-01"
   },
@@ -96,12 +120,39 @@
     "publicHttpBootstrap": "passed-via-nginx-host-header-and-public-resolve",
     "publicHttpsHome": "passed",
     "publicHealthGet": "passed",
+    "publicDependencyHealthGet": "passed-openai_gateway_responses-ok-true",
+    "publicResponsesNoAuth": "passed-401-api-key-required",
+    "authenticatedResponsesPost": "passed-200-account-17-gpt-5.5",
     "tlsCertificate": "passed",
-    "verifiedAt": "2026-05-01"
+    "verifiedAt": "2026-05-02"
   },
   "operationalPlaybooks": {
+    "runtimeHotfix": {
+      "purpose": "fix live runtime drift without touching unrelated observability code",
+      "incidentOrder": [
+        "confirm the remote runtime has loaded the intended config",
+        "check GET /health then GET /health/deps before changing code",
+        "for Codex Responses incidents, verify public /responses and /v1/responses; do not chase /openai/v1/responses as the primary public path",
+        "prefer POST /api/reload-config to apply config fixes",
+        "for backend Go hotfixes, compile one binary with a temporary golang container, docker cp it into sub2api, restart only sub2api, then docker commit sub2api sub2api:local",
+        "use docker build only when base images, dependencies, embedded frontend assets, Dockerfile, or explicit full-image release requires it"
+      ],
+      "minimalBinaryHotfix": {
+        "buildContainer": "golang:1.26.2-alpine",
+        "sourceRoot": "/srv/sub2api",
+        "outputPath": "/tmp/sub2api-build/sub2api",
+        "targetContainer": "sub2api",
+        "targetBinary": "/app/sub2api",
+        "restartScope": "sub2api container only",
+        "postVerify": [
+          "GET https://sub2api.tengokukk.com/health/deps returns openai_gateway_responses.ok=true",
+          "POST https://sub2api.tengokukk.com/responses without key returns 401 API_KEY_REQUIRED",
+          "authenticated POST /responses returns 200 and logs account_id/model"
+        ]
+      }
+    },
     "openaiOAuthAccountImport": {
-      "purpose": "document the canonical import and validation contract for OpenAI OAuth accounts",
+      "purpose": "canonical import contract for OpenAI OAuth accounts",
       "importRoute": {
         "method": "POST",
         "path": "/api/v1/admin/accounts/data",
@@ -151,62 +202,15 @@
           "expires_at",
           "auto_pause_on_expired"
         ]
-      },
-      "parsingRules": [
-        "Treat a single OAuth login event as one indivisible token batch.",
-        "Reject mixed token bundles even if individual tokens appear valid.",
-        "Use decoded id_token claims as the source of truth for OpenAI account identity metadata.",
-        "If email, plan_type, chatgpt_account_id, chatgpt_user_id, or organization_id are omitted, import may backfill them from id_token.",
-        "If those fields are supplied explicitly, they should match the decoded id_token claims.",
-        "Do not use a human password or bare email address as the OpenAI OAuth import credential."
-      ],
-      "validationWorkflow": [
-        "write or import the account with one internally consistent token bundle",
-        "run POST /api/v1/admin/accounts/:id/test",
-        "require a real successful upstream response before treating the account as healthy",
-        "if a stale Fail state remains, run POST /api/v1/admin/accounts/:id/clear-error"
-      ],
-      "knownFailurePatterns": [
-        "Mismatched id_token and access_token from different login batches cause false repair loops.",
-        "A previous Fail state can persist visually until clear-error is called after a successful retest."
-      ],
-      "implementationRefs": [
-        "backend/internal/handler/admin/account_data.go",
-        "backend/internal/pkg/openai/oauth.go",
-        "frontend/src/composables/useOpenAIOAuth.ts"
-      ],
-      "secretHandling": {
-        "allowTrackedSecrets": false,
-        "forbiddenInRepo": [
-          "live access_token",
-          "live refresh_token",
-          "live id_token",
-          "callback URLs containing tokens",
-          "human passwords"
-        ]
       }
     }
-  },
-  "remoteBootstrapState": {
-    "serverHost": "170.106.179.226",
-    "runtimeRoot": "/srv/sub2api",
-    "containerNames": [
-      "sub2api",
-      "sub2api-postgres",
-      "sub2api-redis"
-    ],
-    "publicHost": "sub2api.tengokukk.com",
-    "nginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
-    "bootstrapMode": "final-https-live",
-    "bootstrapAppliedAt": "2026-05-01",
-    "publicDns": "ready",
-    "tls": "ready"
   },
   "verification": {
     "requiredEvidence": [
       "project.json remains valid JSON",
       "README.md and project.json describe the same import contract",
       "README.md and project.json agree on the live host sub2api.tengokukk.com",
+      "README.md and project.json state that only the public production runtime is maintained",
       "no plaintext secrets are introduced into tracked files"
     ]
   }

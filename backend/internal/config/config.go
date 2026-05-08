@@ -62,6 +62,7 @@ type Config struct {
 	Log                     LogConfig                     `mapstructure:"log"`
 	CORS                    CORSConfig                    `mapstructure:"cors"`
 	Security                SecurityConfig                `mapstructure:"security"`
+	AuthBootstrap           AuthBootstrapConfig           `mapstructure:"auth_bootstrap"`
 	Billing                 BillingConfig                 `mapstructure:"billing"`
 	Turnstile               TurnstileConfig               `mapstructure:"turnstile"`
 	Database                DatabaseConfig                `mapstructure:"database"`
@@ -89,6 +90,11 @@ type Config struct {
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
+}
+
+type AuthBootstrapConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Secret  string `mapstructure:"secret"`
 }
 
 type LogConfig struct {
@@ -1241,6 +1247,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	}
 	cfg.Server.FrontendURL = strings.TrimSpace(cfg.Server.FrontendURL)
 	cfg.JWT.Secret = strings.TrimSpace(cfg.JWT.Secret)
+	cfg.AuthBootstrap.Secret = strings.TrimSpace(cfg.AuthBootstrap.Secret)
 	cfg.LinuxDo.ClientID = strings.TrimSpace(cfg.LinuxDo.ClientID)
 	cfg.LinuxDo.ClientSecret = strings.TrimSpace(cfg.LinuxDo.ClientSecret)
 	cfg.LinuxDo.AuthorizeURL = strings.TrimSpace(cfg.LinuxDo.AuthorizeURL)
@@ -1426,6 +1433,10 @@ func setDefaults() {
 
 	// Security - disable direct fallback on proxy error
 	viper.SetDefault("security.proxy_fallback.allow_direct_on_error", false)
+
+	// Auth bootstrap (disabled by default; intended for reverse-proxy protected auto-login flows)
+	viper.SetDefault("auth_bootstrap.enabled", false)
+	viper.SetDefault("auth_bootstrap.secret", "")
 
 	// Billing
 	viper.SetDefault("billing.circuit_breaker.enabled", true)
@@ -1871,6 +1882,9 @@ func (c *Config) Validate() error {
 	}
 	if c.JWT.RefreshWindowMinutes < 0 {
 		return fmt.Errorf("jwt.refresh_window_minutes must be non-negative")
+	}
+	if c.AuthBootstrap.Enabled && strings.TrimSpace(c.AuthBootstrap.Secret) == "" {
+		return fmt.Errorf("auth_bootstrap.secret is required when auth_bootstrap.enabled=true")
 	}
 	if c.Security.CSP.Enabled && strings.TrimSpace(c.Security.CSP.Policy) == "" {
 		return fmt.Errorf("security.csp.policy is required when CSP is enabled")

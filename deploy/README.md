@@ -6,7 +6,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 | Method | Best For | Setup Wizard |
 |--------|----------|--------------|
-| **Docker Compose** | Quick setup, all-in-one | Not needed (auto-setup) |
+| **Docker Compose** | Quick setup, all-in-one, source build | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
 ## Files
@@ -44,7 +44,7 @@ chmod +x docker-deploy.sh
 ```
 
 **What the script does:**
-- Downloads `docker-compose.local.yml` and `.env.example`
+- Prepares `docker-compose.local.yml` and `.env.example`
 - Automatically generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
 - Creates `.env` file with generated secrets
 - Creates necessary data directories (data/, postgres_data/, redis_data/)
@@ -53,7 +53,7 @@ chmod +x docker-deploy.sh
 **After running the script:**
 ```bash
 # Start services
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 
 # View logs
 docker compose -f docker-compose.local.yml logs -f sub2api
@@ -72,7 +72,7 @@ If you prefer manual control:
 ```bash
 # Clone repository
 git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api/deploy
+cd sub2api
 
 # Configure environment
 cp .env.example .env
@@ -88,7 +88,7 @@ echo "TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}" >> .env
 mkdir -p data postgres_data redis_data
 
 # Start all services using local directory version
-docker compose -f docker-compose.local.yml up -d
+docker compose -f deploy/docker-compose.local.yml up -d --build
 
 # View logs (check for auto-generated admin password)
 docker compose -f docker-compose.local.yml logs -f sub2api
@@ -105,6 +105,20 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
 **Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+
+### Frontend Hot Update
+
+The backend serves embedded frontend assets, but files under `data/public/` take precedence.
+That means you can hot-update the UI by syncing the frontend build output into `data/public/`
+without restarting the backend process.
+
+Suggested flow:
+
+1. Build the frontend on the server or in CI.
+2. Sync the generated static files into `data/public/`.
+3. Refresh the browser; the backend will serve the override files immediately.
+
+This is the preferred path for UI-only changes.
 
 ### How Auto-Setup Works
 
@@ -162,7 +176,7 @@ For **local directory version** (docker-compose.local.yml):
 
 ```bash
 # Start services
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 
 # Stop services
 docker compose -f docker-compose.local.yml down
@@ -174,8 +188,7 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 docker compose -f docker-compose.local.yml restart sub2api
 
 # Update to latest version
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 
 # Remove all data (caution!)
 docker compose -f docker-compose.local.yml down
@@ -204,6 +217,19 @@ docker compose up -d
 # Remove all data (caution!)
 docker compose down -v
 ```
+
+### Source-Based CI/CD
+
+For automatic deployment from GitHub to your server:
+
+1. Clone this repository on the server and keep it updated locally.
+2. Configure GitHub repository secrets:
+   - `DEPLOY_HOST`
+   - `DEPLOY_USER`
+   - `DEPLOY_SSH_KEY`
+   - `DEPLOY_PATH`
+   - optional: `DEPLOY_PORT`, `DEPLOY_BRANCH`
+3. The `.github/workflows/deploy.yml` workflow will SSH into the server, pull the latest source, rebuild the stack with `docker compose`, and restart the service.
 
 ### Environment Variables
 

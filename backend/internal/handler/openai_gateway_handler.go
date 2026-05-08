@@ -37,6 +37,11 @@ type OpenAIGatewayHandler struct {
 	cfg                     *config.Config
 }
 
+type OpenAIDependenciesStatus struct {
+	OK      bool     `json:"ok"`
+	Missing []string `json:"missing"`
+}
+
 func resolveOpenAIForwardDefaultMappedModel(apiKey *service.APIKey, fallbackModel string) string {
 	if fallbackModel = strings.TrimSpace(fallbackModel); fallbackModel != "" {
 		return fallbackModel
@@ -72,7 +77,7 @@ func NewOpenAIGatewayHandler(
 			maxAccountSwitches = cfg.Gateway.MaxAccountSwitches
 		}
 	}
-	return &OpenAIGatewayHandler{
+	h := &OpenAIGatewayHandler{
 		gatewayService:          gatewayService,
 		billingCacheService:     billingCacheService,
 		apiKeyService:           apiKeyService,
@@ -82,6 +87,20 @@ func NewOpenAIGatewayHandler(
 		maxAccountSwitches:      maxAccountSwitches,
 		cfg:                     cfg,
 	}
+	if missing := h.missingResponsesDependencies(); len(missing) > 0 {
+		logger.L().Error("openai.handler_dependencies_missing_on_init",
+			zap.Strings("missing_dependencies", missing),
+		)
+	}
+	return h
+}
+
+func (h *OpenAIGatewayHandler) ResponsesDependenciesStatus() OpenAIDependenciesStatus {
+	missing := h.missingResponsesDependencies()
+	if len(missing) == 0 {
+		return OpenAIDependenciesStatus{OK: true, Missing: []string{}}
+	}
+	return OpenAIDependenciesStatus{OK: false, Missing: missing}
 }
 
 // Responses handles OpenAI Responses API endpoint

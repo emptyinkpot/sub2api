@@ -468,7 +468,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity'
+export type GroupPlatform = 'anthropic' | 'openai' | 'glm' | 'gemini' | 'antigravity'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -642,7 +642,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity'
+export type AccountPlatform = 'anthropic' | 'openai' | 'glm' | 'gemini' | 'antigravity'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
@@ -714,6 +714,105 @@ export interface ProxyQualityCheckResult {
   challenge_count: number
   checked_at: number
   items: ProxyQualityCheckItem[]
+}
+
+export interface ProxyRiskSummary {
+  generated_at: number
+  total_proxies: number
+  active_proxies: number
+  known_exit_ip_count: number
+  unknown_exit_proxies: number
+  total_bound_accounts: number
+  risk_groups: ProxyRiskGroup[]
+}
+
+export interface ProxyRiskGroup {
+  exit_ip: string
+  proxy_count: number
+  account_count: number
+  quality_status?: Proxy['quality_status']
+  country?: string
+  country_code?: string
+  proxy_ids: number[]
+  proxies: ProxyRiskProxy[]
+  warnings?: string[]
+}
+
+export interface ProxyRiskProxy {
+  id: number
+  name: string
+  status: Proxy['status']
+  account_count: number
+  quality_status?: Proxy['quality_status']
+  quality_score?: number
+  quality_checked?: number
+}
+
+export interface ProxyAssignmentInput {
+  account_ids?: number[]
+  filters?: {
+    platform?: string
+    type?: string
+    status?: string
+    group?: string
+    search?: string
+    privacy_mode?: string
+  }
+  plan_id?: string
+  only_unbound?: boolean
+  preserve_existing_binding?: boolean
+  require_exit_ip?: boolean
+  min_quality_score?: number
+  max_accounts_per_exit_ip?: number
+}
+
+export interface ProxyAssignmentPlan {
+  plan_id: string
+  generated_at: number
+  account_count: number
+  change_count: number
+  items: ProxyAssignmentItem[]
+  summary: ProxyAssignmentSummary
+}
+
+export interface ProxyAssignmentSummary {
+  keep: number
+  assign: number
+  rebalance: number
+  skip: number
+  no_available_proxy: number
+  exit_ip_over_limit: number
+}
+
+export interface ProxyAssignmentItem {
+  account_id: number
+  account_name: string
+  platform: AccountPlatform
+  type: AccountType
+  old_proxy_id?: number
+  old_proxy_name?: string
+  old_exit_ip?: string
+  new_proxy_id?: number
+  new_proxy_name?: string
+  new_exit_ip?: string
+  action: 'keep' | 'assign' | 'rebalance' | 'clear' | 'skip'
+  reason: string
+  warnings?: string[]
+  max_accounts_per_exit_ip: number
+}
+
+export interface ProxyAssignmentApplyResult {
+  plan: ProxyAssignmentPlan
+  success: number
+  failed: number
+  success_ids: number[]
+  failed_ids: number[]
+  results: Array<{
+    account_id: number
+    success: boolean
+    action: ProxyAssignmentItem['action']
+    error?: string
+  }>
 }
 
 // Gemini credentials structure for OAuth and API Key authentication

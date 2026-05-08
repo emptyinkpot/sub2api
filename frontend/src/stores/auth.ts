@@ -5,7 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
-import { authAPI, isTotp2FARequired, type LoginResponse } from '@/api'
+import { authAPI, bootstrapLogin, isTotp2FARequired, type LoginResponse } from '@/api'
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '@/types'
 
 const AUTH_TOKEN_KEY = 'auth_token'
@@ -258,6 +258,30 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Attempt to bootstrap an authenticated session without a manual login form.
+   * Intended for deployments where Nginx already restricts access to a trusted
+   * client and the backend can safely mint an admin session on demand.
+   */
+  async function bootstrapAutoLogin(): Promise<boolean> {
+    if (token.value || localStorage.getItem(AUTH_TOKEN_KEY)) {
+      return false
+    }
+
+    try {
+      const response = await bootstrapLogin()
+      setAuthFromResponse(response)
+      return true
+    } catch (error) {
+      const status = (error as { status?: number; response?: { status?: number } })?.status ??
+        (error as { response?: { status?: number } })?.response?.status
+      if (status !== 401 && status !== 403 && status !== 404) {
+        console.warn('Bootstrap login failed:', error)
+      }
+      return false
+    }
+  }
+
+  /**
    * Complete login with 2FA code
    * @param tempToken - Temporary token from initial login
    * @param totpCode - 6-digit TOTP code
@@ -483,6 +507,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     login2FA,
     register,
+    bootstrapAutoLogin,
     setToken,
     logout,
     checkAuth,

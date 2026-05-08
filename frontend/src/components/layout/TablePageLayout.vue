@@ -70,9 +70,9 @@ onUnmounted(() => {
 }
 
 .table-scroll-container :deep(table) {
-  @apply w-full;
-  min-width: max-content; /* 关键：确保表格宽度根据内容撑开，从而触发横向滚动 */
-  display: table; /* 使用标准 table 布局以支持 sticky 列 */
+  @apply w-full table-fixed;
+  min-width: 100%;
+  display: table;
 }
 
 .table-scroll-container :deep(thead) {

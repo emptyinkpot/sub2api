@@ -359,6 +359,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/runtime/routing',
+    name: 'AdminRuntimeRouting',
+    component: () => import('@/views/admin/RuntimeRoutingView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Runtime Routing'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),
@@ -682,7 +692,7 @@ router.beforeEach((to, _from, next) => {
 
   // Route requires authentication
   if (!authStore.isAuthenticated) {
-    // Not authenticated, redirect to login
+    // Not authenticated, redirect to login for console routes.
     next({
       path: '/login',
       query: { redirect: to.fullPath } // Save intended destination

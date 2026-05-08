@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" v-if="showUsageWindows">
+  <div ref="rootRef" v-if="showUsageWindows" class="max-w-full overflow-hidden">
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
       v-if="
@@ -30,12 +30,12 @@
       </div>
 
       <!-- Error state -->
-      <div v-else-if="error" class="text-xs text-red-500">
+      <div v-else-if="error" class="max-w-full truncate text-xs text-red-500" :title="error">
         {{ error }}
       </div>
 
       <!-- Usage data -->
-      <div v-else-if="usageInfo" class="space-y-1">
+      <div v-else-if="usageInfo" class="max-w-full space-y-1 overflow-hidden">
         <!-- API error (degraded response) -->
         <div v-if="usageInfo.error" class="text-xs text-amber-600 dark:text-amber-400 truncate max-w-[200px]" :title="usageInfo.error">
           {{ usageInfo.error }}
@@ -69,16 +69,16 @@
         />
 
         <!-- Passive sampling label + active query button -->
-        <div class="flex items-center gap-1.5 mt-0.5">
+        <div class="mt-0.5 flex max-w-full flex-wrap items-center gap-1.5 overflow-hidden">
           <span
             v-if="usageInfo.source === 'passive'"
-            class="text-[9px] text-gray-400 dark:text-gray-500 italic"
+            class="min-w-0 truncate text-[9px] italic text-gray-400 dark:text-gray-500"
           >
             {{ t('admin.accounts.usageWindow.passiveSampled') }}
           </span>
           <button
             type="button"
-            class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+            class="inline-flex max-w-full items-center gap-0.5 overflow-hidden rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
             :disabled="activeQueryLoading"
             @click="loadActiveUsage"
           >
@@ -96,7 +96,7 @@
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
-            {{ t('admin.accounts.usageWindow.activeQuery') }}
+            <span class="truncate">{{ t('admin.accounts.usageWindow.activeQuery') }}</span>
           </button>
         </div>
       </div>
@@ -107,7 +107,7 @@
 
     <!-- OpenAI OAuth accounts: single source from /usage API -->
     <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
-      <div v-if="hasOpenAIUsageFallback" class="space-y-1">
+      <div v-if="hasOpenAIUsageFallback" class="max-w-full space-y-1 overflow-hidden">
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
@@ -145,7 +145,7 @@
     <!-- Antigravity OAuth accounts: fetch usage from API -->
     <template v-else-if="account.platform === 'antigravity' && account.type === 'oauth'">
       <!-- 账户类型徽章 -->
-      <div v-if="antigravityTierLabel" class="mb-1 flex items-center gap-1">
+      <div v-if="antigravityTierLabel" class="mb-1 flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
         <span
           :class="[
             'inline-block rounded px-1.5 py-0.5 text-[10px] font-medium',
@@ -171,7 +171,7 @@
             />
           </svg>
           <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
+          class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] whitespace-normal break-words rounded bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
           >
             {{ t('admin.accounts.ineligibleWarning') }}
           </span>
@@ -188,19 +188,19 @@
         >
           {{ forbiddenLabel }}
         </span>
-        <div v-if="validationURL" class="flex items-center gap-1">
+        <div v-if="validationURL" class="flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
           <a
             :href="validationURL"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            class="min-w-0 truncate text-[10px] text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
             :title="t('admin.accounts.openVerification')"
           >
             {{ t('admin.accounts.openVerification') }}
           </a>
           <button
             type="button"
-            class="text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            class="min-w-0 truncate text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             :title="t('admin.accounts.copyLink')"
             @click="copyValidationURL"
           >
@@ -233,12 +233,12 @@
       </div>
 
       <!-- Error state -->
-      <div v-else-if="error" class="text-xs text-red-500">
+      <div v-else-if="error" class="max-w-full truncate text-xs text-red-500" :title="error">
         {{ error }}
       </div>
 
       <!-- Usage data from API -->
-      <div v-else-if="hasAntigravityQuotaFromAPI" class="space-y-1">
+      <div v-else-if="hasAntigravityQuotaFromAPI" class="max-w-full space-y-1 overflow-hidden">
         <!-- Gemini 3 Pro -->
         <UsageProgressBar
           v-if="antigravity3ProUsageFromAPI !== null"
@@ -275,11 +275,11 @@
           color="amber"
         />
 
-        <div v-if="aiCreditsDisplay" class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+        <div v-if="aiCreditsDisplay" class="mt-1 max-w-full truncate text-[10px] text-gray-500 dark:text-gray-400" :title="aiCreditsDisplay">
           💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
         </div>
       </div>
-      <div v-else-if="aiCreditsDisplay" class="text-[10px] text-gray-500 dark:text-gray-400">
+      <div v-else-if="aiCreditsDisplay" class="max-w-full truncate text-[10px] text-gray-500 dark:text-gray-400" :title="aiCreditsDisplay">
         💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
       </div>
       <div v-else class="text-xs text-gray-400">-</div>
@@ -288,7 +288,7 @@
     <!-- Gemini platform: show quota + local usage window -->
     <template v-else-if="account.platform === 'gemini'">
       <!-- Auth Type + Tier Badge (first line) -->
-      <div v-if="geminiAuthTypeLabel" class="mb-1 flex items-center gap-1">
+      <div v-if="geminiAuthTypeLabel" class="mb-1 flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
         <span
           :class="[
             'inline-block rounded px-1.5 py-0.5 text-[10px] font-medium',
@@ -313,7 +313,7 @@
             />
           </svg>
           <span
-            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 whitespace-normal break-words rounded bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
+            class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] whitespace-normal break-words rounded bg-gray-900 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
           >
             <div class="font-semibold mb-1">{{ t('admin.accounts.gemini.quotaPolicy.title') }}</div>
             <div class="mb-2 text-gray-300">{{ t('admin.accounts.gemini.quotaPolicy.note') }}</div>
@@ -331,12 +331,12 @@
       </div>
 
       <!-- Usage data or unlimited flow -->
-      <div class="space-y-1">
+      <div class="max-w-full space-y-1 overflow-hidden">
         <div
           v-if="showGeminiTodayStats && todayStats"
           class="mb-0.5 flex items-center"
         >
-          <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
+            <div class="flex max-w-full flex-wrap items-center gap-1.5 overflow-hidden text-[9px] text-gray-500 dark:text-gray-400">
             <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
               {{ formatKeyRequests }} req
             </span>
@@ -370,7 +370,7 @@
             <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
           </div>
         </div>
-        <div v-else-if="error" class="text-xs text-red-500">
+        <div v-else-if="error" class="max-w-full truncate text-xs text-red-500" :title="error">
           {{ error }}
         </div>
         <!-- Gemini: show daily usage bars when available -->
@@ -402,17 +402,17 @@
   </div>
 
   <!-- Non-OAuth/Setup-Token accounts -->
-  <div ref="rootRef" v-else>
+  <div ref="rootRef" v-else class="max-w-full overflow-hidden">
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
     <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
-    <div v-else class="space-y-1">
+    <div v-else class="max-w-full space-y-1 overflow-hidden">
       <!-- Today stats row (requests, tokens, cost, user_cost) -->
       <div
         v-if="todayStats"
         class="mb-0.5 flex items-center"
       >
-        <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
+        <div class="flex max-w-full flex-wrap items-center gap-1.5 overflow-hidden text-[9px] text-gray-500 dark:text-gray-400">
           <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
             {{ formatKeyRequests }} req
           </span>
@@ -481,7 +481,7 @@ import UsageProgressBar from './UsageProgressBar.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 
 // Module-level cache shared across all AccountUsageCell instances
-const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
+const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number; refreshToken: number }>()
 const USAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 const props = withDefaults(
@@ -990,7 +990,11 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   // Check cache
   if (!options?.bypassCache) {
     const cached = _usageCache.get(props.account.id)
-    if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL) {
+    if (
+      cached &&
+      Date.now() - cached.ts < USAGE_CACHE_TTL &&
+      cached.refreshToken === props.manualRefreshToken
+    ) {
       usageInfo.value = cached.data
       loading.value = false
       return
@@ -1005,7 +1009,11 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
     const result = await enqueueUsageRequest(props.account, fetchFn)
     if (!unmounted.value) {
       usageInfo.value = result
-      _usageCache.set(props.account.id, { data: result, ts: Date.now() })
+      _usageCache.set(props.account.id, {
+        data: result,
+        ts: Date.now(),
+        refreshToken: props.manualRefreshToken
+      })
     }
   } catch (e: any) {
     if (!unmounted.value) {
@@ -1070,7 +1078,7 @@ const attachVisibilityObserver = () => {
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active')
+    await loadUsage({ source: 'active', bypassCache: true })
   } catch (e: any) {
     console.error('Failed to load active usage:', e)
   } finally {
@@ -1188,7 +1196,10 @@ watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
   if (!prevKey || nextKey === prevKey) return
   if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return
 
-  requestAutoLoad()
+  _usageCache.delete(props.account.id)
+  loadUsage({ bypassCache: true }).catch((e) => {
+    console.error('Failed to refresh OpenAI usage after credential change:', e)
+  })
 })
 
 watch(

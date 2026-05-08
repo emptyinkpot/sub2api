@@ -1,12 +1,12 @@
 <template>
-  <div class="inline-flex flex-col gap-0.5 text-xs font-medium">
+  <div class="flex max-w-full flex-col gap-0.5 text-[11px] font-medium leading-snug">
     <!-- Row 1: Platform + Type -->
-    <div class="inline-flex items-center overflow-hidden rounded-md">
-      <span :class="['inline-flex items-center gap-1 px-2 py-1', platformClass]">
+    <div class="inline-flex max-w-full items-center overflow-hidden rounded-md">
+      <span :class="['inline-flex min-w-0 items-center gap-1 px-1.5 py-0.5', platformClass]">
         <PlatformIcon :platform="platform" size="xs" />
-        <span>{{ platformLabel }}</span>
+        <span class="truncate">{{ platformLabel }}</span>
       </span>
-      <span :class="['inline-flex items-center gap-1 px-1.5 py-1', typeClass]">
+      <span :class="['inline-flex min-w-0 items-center gap-1 px-1 py-0.5', typeClass]">
         <!-- OAuth icon -->
         <svg
           v-if="type === 'oauth'"
@@ -27,28 +27,31 @@
         <!-- API Key icon -->
         <Icon v-else-if="type === 'service_account'" name="cloud" size="xs" />
         <Icon v-else name="key" size="xs" />
-        <span>{{ typeLabel }}</span>
+        <span class="truncate">{{ typeLabel }}</span>
       </span>
     </div>
-    <!-- Row 2: Plan type + Privacy mode (only if either exists) -->
-    <div v-if="planLabel || privacyBadge" class="inline-flex items-center overflow-hidden rounded-md">
-      <span v-if="planLabel" :class="['inline-flex items-center gap-1 px-1.5 py-1', planBadgeClass]">
-        <span>{{ planLabel }}</span>
+    <!-- Row 2: Plan type + Privacy mode + expiration summary -->
+    <div v-if="planLabel || privacyBadge || expiresLabel" class="flex max-w-full flex-wrap items-center gap-0.5 rounded-md">
+      <span v-if="planLabel" :class="['inline-flex min-w-0 items-center gap-1 px-1 py-px', planBadgeClass]">
+        <span class="truncate">{{ planLabel }}</span>
       </span>
       <span
         v-if="privacyBadge"
-        :class="['inline-flex items-center gap-1 px-1.5 py-1', privacyBadge.class]"
+        :class="['inline-flex min-w-0 items-center gap-1 px-1 py-px', privacyBadge.class]"
         :title="privacyBadge.title"
       >
         <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" :d="privacyBadge.icon" />
         </svg>
-        <span>{{ privacyBadge.label }}</span>
+        <span class="truncate">{{ privacyBadge.label }}</span>
       </span>
-    </div>
-    <!-- Row 3: Subscription expiration (non-free paid accounts only) -->
-    <div v-if="expiresLabel" class="text-[10px] leading-tight text-gray-400 dark:text-gray-500 pl-0.5" :title="subscriptionExpiresAt">
-      {{ expiresLabel }}
+      <span
+        v-if="expiresLabel"
+        class="inline-flex min-w-0 items-center px-1 py-px text-[10px] leading-tight text-gray-500 dark:text-gray-400"
+        :title="subscriptionExpiresAt"
+      >
+        <span class="truncate">{{ expiresLabel }}</span>
+      </span>
     </div>
   </div>
 </template>
@@ -75,6 +78,7 @@ const props = defineProps<Props>()
 const platformLabel = computed(() => {
   if (props.platform === 'anthropic') return 'Anthropic'
   if (props.platform === 'openai') return 'OpenAI'
+  if (props.platform === 'glm') return 'GLM'
   if (props.platform === 'antigravity') return 'Antigravity'
   return 'Gemini'
 })
@@ -123,6 +127,9 @@ const platformClass = computed(() => {
   if (props.platform === 'openai') {
     return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
   }
+  if (props.platform === 'glm') {
+    return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400'
+  }
   if (props.platform === 'antigravity') {
     return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
   }
@@ -135,6 +142,9 @@ const typeClass = computed(() => {
   }
   if (props.platform === 'openai') {
     return 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+  }
+  if (props.platform === 'glm') {
+    return 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400'
   }
   if (props.platform === 'antigravity') {
     return 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'

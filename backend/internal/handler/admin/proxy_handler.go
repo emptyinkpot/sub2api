@@ -106,6 +106,17 @@ func (h *ProxyHandler) GetAll(c *gin.Context) {
 	response.Success(c, out)
 }
 
+// GetRiskSummary returns proxy exit IP risk grouping for account isolation.
+// GET /api/v1/admin/proxies/risk-summary
+func (h *ProxyHandler) GetRiskSummary(c *gin.Context) {
+	summary, err := h.adminService.GetProxyRiskSummary(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
 // GetByID handles getting a proxy by ID
 // GET /api/v1/admin/proxies/:id
 func (h *ProxyHandler) GetByID(c *gin.Context) {

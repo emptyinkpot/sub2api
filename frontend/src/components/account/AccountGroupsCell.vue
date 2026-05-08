@@ -1,7 +1,7 @@
 <template>
-  <div v-if="groups && groups.length > 0" class="relative max-w-56">
-    <!-- 分组容器：固定最大宽度，最多显示2行 -->
-    <div class="flex flex-wrap gap-1 max-h-14 overflow-hidden">
+  <div v-if="groups && groups.length > 0" class="relative max-w-full sm:max-w-56">
+    <!-- 分组容器：只渲染摘要项，完整列表交给 +N popover -->
+    <div class="flex max-w-full flex-wrap gap-1">
       <GroupBadge
         v-for="group in displayGroups"
         :key="group.id"
@@ -10,14 +10,15 @@
         :subscription-type="group.subscription_type"
         :rate-multiplier="group.rate_multiplier"
         :show-rate="false"
-        class="max-w-24"
+        compact
+        class="max-w-full sm:max-w-24"
       />
       <!-- 更多数量徽章 -->
       <button
         v-if="hiddenCount > 0"
         ref="moreButtonRef"
         @click.stop="showPopover = !showPopover"
-        class="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500 transition-colors cursor-pointer whitespace-nowrap"
+        class="inline-flex items-center gap-0.5 rounded-md px-1 py-px text-[10px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500 transition-colors cursor-pointer whitespace-nowrap"
       >
         <span>+{{ hiddenCount }}</span>
       </button>
@@ -36,11 +37,11 @@
         <div
           v-if="showPopover"
           ref="popoverRef"
-          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-gray-200 bg-white p-2.5 shadow-lg dark:border-dark-600 dark:bg-dark-800"
           :style="popoverStyle"
         >
           <div class="mb-2 flex items-center justify-between">
-            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span class="text-[10px] font-medium text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.groupCountTotal', { count: groups.length }) }}
             </span>
             <button
@@ -52,7 +53,7 @@
               </svg>
             </button>
           </div>
-          <div class="flex flex-wrap gap-1.5 max-h-64 overflow-y-auto">
+          <div class="flex flex-wrap gap-1 max-h-64 overflow-y-auto">
             <GroupBadge
               v-for="group in groups"
               :key="group.id"
@@ -61,6 +62,7 @@
               :subscription-type="group.subscription_type"
               :rate-multiplier="group.rate_multiplier"
               :show-rate="false"
+              compact
             />
           </div>
         </div>

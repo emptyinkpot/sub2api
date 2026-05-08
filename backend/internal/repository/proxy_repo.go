@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
 	entsql "entgo.io/ent/dialect/sql"
+	"github.com/lib/pq"
 )
 
 type sqlQuerier interface {
@@ -49,6 +50,9 @@ func (r *proxyRepository) Create(ctx context.Context, proxyIn *service.Proxy) er
 	created, err := builder.Save(ctx)
 	if err == nil {
 		applyProxyEntityToService(proxyIn, created)
+		if proxyIn.IPAddress != "" {
+			_ = r.updateProxyIPAddress(ctx, proxyIn.ID, proxyIn.IPAddress)
+		}
 	}
 	return err
 }
@@ -61,7 +65,11 @@ func (r *proxyRepository) GetByID(ctx context.Context, id int64) (*service.Proxy
 		}
 		return nil, err
 	}
-	return proxyEntityToService(m), nil
+	out := proxyEntityToService(m)
+	if err := r.hydrateProxyIPAddress(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *proxyRepository) ListByIDs(ctx context.Context, ids []int64) ([]service.Proxy, error) {
@@ -79,6 +87,9 @@ func (r *proxyRepository) ListByIDs(ctx context.Context, ids []int64) ([]service
 	out := make([]service.Proxy, 0, len(proxies))
 	for i := range proxies {
 		out = append(out, *proxyEntityToService(proxies[i]))
+	}
+	if err := r.hydrateProxyIPAddresses(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -104,6 +115,7 @@ func (r *proxyRepository) Update(ctx context.Context, proxyIn *service.Proxy) er
 	updated, err := builder.Save(ctx)
 	if err == nil {
 		applyProxyEntityToService(proxyIn, updated)
+		_ = r.updateProxyIPAddress(ctx, proxyIn.ID, proxyIn.IPAddress)
 		return nil
 	}
 	if dbent.IsNotFound(err) {
@@ -154,6 +166,9 @@ func (r *proxyRepository) ListWithFilters(ctx context.Context, params pagination
 	outProxies := make([]service.Proxy, 0, len(proxies))
 	for i := range proxies {
 		outProxies = append(outProxies, *proxyEntityToService(proxies[i]))
+	}
+	if err := r.hydrateProxyIPAddresses(ctx, outProxies); err != nil {
+		return nil, nil, err
 	}
 
 	return outProxies, paginationResultFromTotal(int64(total), params), nil
@@ -240,6 +255,9 @@ func (r *proxyRepository) buildProxyWithAccountCountResult(ctx context.Context, 
 			AccountCount: counts[proxyOut.ID],
 		})
 	}
+	if err := r.hydrateProxyWithAccountCountIPAddresses(ctx, result); err != nil {
+		return nil, nil, err
+	}
 
 	return result, paginationResultFromTotal(total, params), nil
 }
@@ -278,6 +296,9 @@ func (r *proxyRepository) ListActive(ctx context.Context) ([]service.Proxy, erro
 	outProxies := make([]service.Proxy, 0, len(proxies))
 	for i := range proxies {
 		outProxies = append(outProxies, *proxyEntityToService(proxies[i]))
+	}
+	if err := r.hydrateProxyIPAddresses(ctx, outProxies); err != nil {
+		return nil, err
 	}
 	return outProxies, nil
 }
@@ -408,6 +429,9 @@ func (r *proxyRepository) ListActiveWithAccountCount(ctx context.Context) ([]ser
 			AccountCount: counts[proxyOut.ID],
 		})
 	}
+	if err := r.hydrateProxyWithAccountCountIPAddresses(ctx, result); err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -440,6 +464,104 @@ func applyProxyEntityToService(dst *service.Proxy, src *dbent.Proxy) {
 		return
 	}
 	dst.ID = src.ID
+	dst.Name = src.Name
+	dst.Protocol = src.Protocol
+	dst.Host = src.Host
+	dst.Port = src.Port
+	dst.Status = src.Status
+	if src.Username != nil {
+		dst.Username = *src.Username
+	} else {
+		dst.Username = ""
+	}
+	if src.Password != nil {
+		dst.Password = *src.Password
+	} else {
+		dst.Password = ""
+	}
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+}
+
+func (r *proxyRepository) updateProxyIPAddress(ctx context.Context, proxyID int64, ipAddress string) error {
+	if r.sql == nil || proxyID <= 0 {
+		return nil
+	}
+	ipAddress = strings.TrimSpace(ipAddress)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if ipAddress == "" {
+		rows, err = r.sql.QueryContext(ctx, "UPDATE proxies SET ip_address = NULL WHERE id = $1 RETURNING id", proxyID)
+	} else {
+		rows, err = r.sql.QueryContext(ctx, "UPDATE proxies SET ip_address = $1 WHERE id = $2 RETURNING id", ipAddress, proxyID)
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	return rows.Err()
+}
+
+func (r *proxyRepository) hydrateProxyIPAddress(ctx context.Context, proxyOut *service.Proxy) error {
+	if proxyOut == nil {
+		return nil
+	}
+	proxies := []service.Proxy{*proxyOut}
+	if err := r.hydrateProxyIPAddresses(ctx, proxies); err != nil {
+		return err
+	}
+	*proxyOut = proxies[0]
+	return nil
+}
+
+func (r *proxyRepository) hydrateProxyIPAddresses(ctx context.Context, proxies []service.Proxy) error {
+	if r.sql == nil || len(proxies) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(proxies))
+	indexByID := make(map[int64]int, len(proxies))
+	for i := range proxies {
+		ids = append(ids, proxies[i].ID)
+		indexByID[proxies[i].ID] = i
+	}
+	rows, err := r.sql.QueryContext(ctx, "SELECT id, ip_address FROM proxies WHERE id = ANY($1)", pq.Array(ids))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			id int64
+			ip sql.NullString
+		)
+		if err := rows.Scan(&id, &ip); err != nil {
+			return err
+		}
+		if idx, ok := indexByID[id]; ok && ip.Valid {
+			proxies[idx].IPAddress = ip.String
+		}
+	}
+	return rows.Err()
+}
+
+func (r *proxyRepository) hydrateProxyWithAccountCountIPAddresses(ctx context.Context, proxies []service.ProxyWithAccountCount) error {
+	if len(proxies) == 0 {
+		return nil
+	}
+	base := make([]service.Proxy, 0, len(proxies))
+	for i := range proxies {
+		base = append(base, proxies[i].Proxy)
+	}
+	if err := r.hydrateProxyIPAddresses(ctx, base); err != nil {
+		return err
+	}
+	for i := range proxies {
+		proxies[i].Proxy = base[i]
+		if proxies[i].IPAddress == "" {
+			proxies[i].IPAddress = base[i].IPAddress
+		}
+	}
+	return nil
 }

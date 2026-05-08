@@ -12,7 +12,8 @@ import type {
   UpdateProxyRequest,
   PaginatedResponse,
   AdminDataPayload,
-  AdminDataImportResult
+  AdminDataImportResult,
+  ProxyRiskSummary
 } from '@/types'
 
 /**
@@ -188,6 +189,11 @@ export async function getProxyAccounts(id: number): Promise<ProxyAccountSummary[
   return data
 }
 
+export async function getRiskSummary(): Promise<ProxyRiskSummary> {
+  const { data } = await apiClient.get<ProxyRiskSummary>('/admin/proxies/risk-summary')
+  return data
+}
+
 /**
  * Batch create proxies
  * @param proxies - Array of proxy data to create
@@ -268,6 +274,7 @@ export const proxiesAPI = {
   checkProxyQuality,
   getStats,
   getProxyAccounts,
+  getRiskSummary,
   batchCreate,
   batchDelete,
   exportData,

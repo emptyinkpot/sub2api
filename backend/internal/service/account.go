@@ -962,7 +962,7 @@ func (a *Account) IsAPIKeyOrBedrock() bool {
 }
 
 func (a *Account) IsOpenAI() bool {
-	return a.Platform == PlatformOpenAI
+	return IsOpenAICompatiblePlatform(a.Platform)
 }
 
 func (a *Account) IsAnthropic() bool {

@@ -101,6 +101,14 @@ services:
       - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
 
       # =======================================================================
+      # Reverse-proxy bootstrap login (disabled by default)
+      # For trusted reverse-proxy deployments only. Requests must carry the
+      # configured X-Sub2API-Bootstrap-Secret header injected by the proxy.
+      # =======================================================================
+      - AUTH_BOOTSTRAP_ENABLED=${AUTH_BOOTSTRAP_ENABLED:-false}
+      - AUTH_BOOTSTRAP_SECRET=${AUTH_BOOTSTRAP_SECRET:-}
+
+      # =======================================================================
       # Timezone Configuration
       # This affects ALL time operations in the application:
       # - Database timestamps

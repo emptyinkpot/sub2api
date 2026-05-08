@@ -52,6 +52,10 @@ func (Proxy) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default("active"),
+		field.String("ip_address").
+			MaxLen(45).
+			Optional().
+			Nillable(),
 	}
 }
 

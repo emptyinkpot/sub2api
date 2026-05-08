@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"strings"
 
@@ -392,6 +393,36 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 	}
 
 	h.respondWithTokenPair(c, user)
+}
+
+// BootstrapLogin handles single-user bootstrap access for a reverse-proxy
+// protected deployment. It returns a normal token pair for the first admin user.
+// POST /api/v1/auth/bootstrap
+func (h *AuthHandler) BootstrapLogin(c *gin.Context) {
+	if h.cfg == nil || !h.cfg.AuthBootstrap.Enabled {
+		response.NotFound(c, "Not found")
+		return
+	}
+
+	providedSecret := strings.TrimSpace(c.GetHeader("X-Sub2API-Bootstrap-Secret"))
+	expectedSecret := strings.TrimSpace(h.cfg.AuthBootstrap.Secret)
+	if expectedSecret == "" || subtle.ConstantTimeCompare([]byte(providedSecret), []byte(expectedSecret)) != 1 {
+		response.Forbidden(c, "Bootstrap login is not allowed")
+		return
+	}
+
+	admin, err := h.userService.GetFirstAdmin(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	if err := ensureLoginUserActive(admin); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	h.respondWithTokenPair(c, admin)
 }
 
 // GetCurrentUser handles getting current authenticated user

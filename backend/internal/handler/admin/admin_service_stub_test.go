@@ -333,6 +333,11 @@ func (s *stubAdminService) CreateAccount(ctx context.Context, input *service.Cre
 	return &account, nil
 }
 
+func (s *stubAdminService) CloneAccount(ctx context.Context, id int64) (*service.Account, error) {
+	account := service.Account{ID: 301, Name: "account - 副本", Status: service.StatusActive}
+	return &account, nil
+}
+
 func (s *stubAdminService) UpdateAccount(ctx context.Context, id int64, input *service.UpdateAccountInput) (*service.Account, error) {
 	if s.updateAccountErr != nil {
 		return nil, s.updateAccountErr
@@ -408,6 +413,10 @@ func (s *stubAdminService) ListProxies(ctx context.Context, page, pageSize int, 
 
 func (s *stubAdminService) ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]service.ProxyWithAccountCount, int64, error) {
 	return s.proxyCounts, int64(len(s.proxyCounts)), nil
+}
+
+func (s *stubAdminService) GetProxyRiskSummary(ctx context.Context) (*service.ProxyRiskSummary, error) {
+	return &service.ProxyRiskSummary{}, nil
 }
 
 func (s *stubAdminService) GetAllProxies(ctx context.Context) ([]service.Proxy, error) {
@@ -505,6 +514,14 @@ func (s *stubAdminService) CheckProxyQuality(ctx context.Context, id int64) (*se
 			{Target: "gemini", Status: "pass", HTTPStatus: 200},
 		},
 	}, nil
+}
+
+func (s *stubAdminService) PreviewProxyAssignment(ctx context.Context, input *service.ProxyAssignmentInput) (*service.ProxyAssignmentPlan, error) {
+	return &service.ProxyAssignmentPlan{}, nil
+}
+
+func (s *stubAdminService) ApplyProxyAssignment(ctx context.Context, input *service.ProxyAssignmentInput) (*service.ProxyAssignmentApplyResult, error) {
+	return &service.ProxyAssignmentApplyResult{Plan: &service.ProxyAssignmentPlan{}}, nil
 }
 
 func (s *stubAdminService) ListRedeemCodes(ctx context.Context, page, pageSize int, codeType, status, search string, sortBy, sortOrder string) ([]service.RedeemCode, int64, error) {
