@@ -39,6 +39,7 @@ const (
 const (
 	PlatformAnthropic   = domain.PlatformAnthropic
 	PlatformOpenAI      = domain.PlatformOpenAI
+	PlatformGLM         = domain.PlatformGLM
 	PlatformGemini      = domain.PlatformGemini
 	PlatformAntigravity = domain.PlatformAntigravity
 )
@@ -61,6 +62,10 @@ func IsAllowedQuotaPlatform(s string) bool {
 		}
 	}
 	return false
+}
+
+func IsOpenAICompatiblePlatform(platform string) bool {
+	return platform == PlatformOpenAI || platform == PlatformGLM
 }
 
 // Account type constants
