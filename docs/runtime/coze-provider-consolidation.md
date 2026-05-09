@@ -120,3 +120,17 @@ Do not configure Telegram, Mortis, n8n, Codex, or any client directly against `c
 Do not expose raw Coze tokens as client-facing API keys.
 
 See also: [Coze Native Provider Migration Plan](./coze-native-provider-migration-plan.md).
+
+## Native Cutover Status
+
+As of 2026-05-09, the active Coze route is native inside sub2api. The previous `coze-openai-proxy` sidecar has been stopped and renamed as retired. Do not restart it unless rolling back from the native Coze provider.
+
+Active production route:
+
+```text
+https://sub2api.tengokukk.com/v1
+-> coze-native-shell key
+-> Coze Native group
+-> coze-native account
+-> Coze v3 /v3/chat
+```

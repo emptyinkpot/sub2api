@@ -34,6 +34,9 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	parsed *ParsedRequest,
 ) (*ForwardResult, error) {
 	startTime := time.Now()
+	if account.IsCoze() {
+		return s.forwardCozeAsChatCompletions(ctx, c, account, body, startTime)
+	}
 
 	// 1. Parse Chat Completions request
 	var ccReq apicompat.ChatCompletionsRequest

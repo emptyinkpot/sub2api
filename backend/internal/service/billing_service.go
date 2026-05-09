@@ -254,6 +254,12 @@ func (s *BillingService) initFallbackPricing() {
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
 
+	// Coze-native traffic is billed through external Coze credits. Keep sub2api
+	// accounting zero-cost unless an explicit channel pricing override is added.
+	if modelLower == "coze-shell" || strings.HasPrefix(modelLower, "coze-") {
+		return &ModelPricing{}
+	}
+
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
 		if strings.Contains(modelLower, "4.7") || strings.Contains(modelLower, "4-7") {

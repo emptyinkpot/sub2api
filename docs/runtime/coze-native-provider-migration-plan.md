@@ -410,3 +410,40 @@ Docker: go test -tags unit ./internal/service -run Coze -> BLOCKED by existing u
 ```
 
 The service-package blocker is outside the Coze migration files. Do not cut over production routing until the service package compiles cleanly.
+
+## Production Cutover Log
+
+2026-05-09:
+
+- Built and deployed a native-Coze backend image on the 170 server.
+- Created native account `coze-native` with `platform=coze`.
+- Created native group `Coze Native`.
+- Created server-side key file for `coze-native-shell` under `deploy/secrets/` outside git.
+- Verified public endpoint smoke through `https://sub2api.tengokukk.com/v1`:
+  - `/v1/chat/completions` with `model=coze-shell` -> HTTP 200, selected `account_id=27`, `platform=coze`.
+  - `/v1/responses` with `model=coze-shell` -> HTTP 200, selected `account_id=27`, `platform=coze`.
+- Added zero-cost fallback pricing for `coze-*` models so usage recording does not fail when LiteLLM has no Coze model entry.
+- Disabled old sidecar-backed accounts/groups/API keys:
+  - account `coze-openai-proxy` disabled
+  - account `coze-glm-proxy` disabled
+  - group `Coze OpenAI` disabled
+  - group `Coze GLM` disabled
+  - key `coze-shell-gateway` disabled
+  - key `coze-glm-shell` disabled
+- Stopped and renamed the sidecar container to `coze-openai-proxy-retired-*`.
+
+Current active route:
+
+```text
+Client / Mortis / Telegram
+-> https://sub2api.tengokukk.com/v1
+-> key coze-native-shell
+-> group Coze Native
+-> account coze-native
+-> Coze v3 /v3/chat
+```
+
+Rollback point:
+
+- Docker image tag: `sub2api:rollback-pre-native-coze-*` and `sub2api:rollback-before-coze-pricing-*`
+- Retired sidecar source remains at `/srv/coze-openai-proxy` with `RETIRED_BY_SUB2API_NATIVE.md`.

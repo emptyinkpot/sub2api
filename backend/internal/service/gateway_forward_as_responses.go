@@ -36,6 +36,9 @@ func (s *GatewayService) ForwardAsResponses(
 	parsed *ParsedRequest,
 ) (*ForwardResult, error) {
 	startTime := time.Now()
+	if account.IsCoze() {
+		return s.forwardCozeAsResponses(ctx, c, account, body, startTime)
+	}
 
 	// 1. Parse Responses request
 	var responsesReq apicompat.ResponsesRequest
