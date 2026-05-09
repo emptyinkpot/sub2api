@@ -19,6 +19,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/coze"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/glm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -183,6 +184,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	// Route to platform-specific test method
 	if account.Platform == PlatformGLM {
 		return s.testGLMAccountConnection(c, account, modelID)
+	}
+
+	if account.IsCoze() {
+		return s.testCozeAccountConnection(c, account, modelID, prompt)
 	}
 
 	if account.IsOpenAI() {
@@ -977,6 +982,89 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 		account.Status = StatusActive
 		account.ErrorMessage = ""
 	}
+}
+
+func (s *AccountTestService) testCozeAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+	ctx := c.Request.Context()
+
+	if account.Type != AccountTypeAPIKey {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
+	}
+
+	testModelID := modelID
+	if testModelID == "" {
+		testModelID = coze.DefaultTestModel
+	}
+	testModelID = account.GetMappedModel(testModelID)
+
+	apiToken := account.GetCredential("coze_api_token")
+	if apiToken == "" {
+		apiToken = account.GetCredential("api_key")
+	}
+	if apiToken == "" {
+		return s.sendErrorAndEnd(c, "No Coze API token available")
+	}
+
+	botID := account.GetCredential("coze_bot_id")
+	if botID == "" {
+		return s.sendErrorAndEnd(c, "No Coze bot ID available")
+	}
+
+	userID := account.GetCredential("coze_user_id")
+	if userID == "" {
+		userID = "sub2api-test"
+	}
+
+	baseURL := account.GetCredential("coze_api_base")
+	if baseURL == "" {
+		baseURL = account.GetBaseURL()
+	}
+	if baseURL == "" {
+		baseURL = coze.DefaultBaseURL
+	}
+	if normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL); err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+	} else {
+		baseURL = normalizedBaseURL
+	}
+
+	message := strings.TrimSpace(prompt)
+	if message == "" {
+		message = "hi"
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+
+	client := &coze.Client{BaseURL: baseURL, APIToken: apiToken}
+	resp, err := client.CreateChatStream(ctx, coze.BuildChatRequest(botID, userID, []coze.Message{{Role: "user", Content: message, ContentType: "text"}}))
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return s.processCozeStream(c, resp.Body)
+}
+
+func (s *AccountTestService) processCozeStream(c *gin.Context, stream io.Reader) error {
+	events, err := coze.ParseSSE(stream)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Stream read error: %s", err.Error()))
+	}
+
+	answer := coze.AccumulateAnswerText(events)
+	if strings.TrimSpace(answer) == "" {
+		return s.sendErrorAndEnd(c, "Coze stream ended without answer content")
+	}
+
+	s.sendEvent(c, TestEvent{Type: "content", Text: answer})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
 }
 
 // testGeminiAccountConnection tests a Gemini account's connection

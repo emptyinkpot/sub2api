@@ -1050,6 +1050,10 @@ func (a *Account) IsOpenAI() bool {
 	return IsOpenAICompatiblePlatform(a.Platform)
 }
 
+func (a *Account) IsCoze() bool {
+	return a.Platform == PlatformCoze
+}
+
 func (a *Account) IsAnthropic() bool {
 	return a.Platform == PlatformAnthropic
 }
