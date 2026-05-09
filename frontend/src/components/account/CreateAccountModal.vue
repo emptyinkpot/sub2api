@@ -124,6 +124,19 @@
           </button>
           <button
             type="button"
+            @click="form.platform = 'coze'; accountCategory = 'apikey'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'coze'
+                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <Icon name="chat" size="sm" />
+            Coze
+          </button>
+          <button
+            type="button"
             @click="form.platform = 'gemini'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -1034,6 +1047,8 @@
                 ? 'https://api.openai.com'
                 : form.platform === 'glm'
                   ? 'https://open.bigmodel.cn/api/paas/v4'
+                : form.platform === 'coze'
+                  ? 'http://127.0.0.1:8788/v1'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : 'https://api.anthropic.com'
@@ -1053,6 +1068,8 @@
                 ? 'sk-proj-...'
                 : form.platform === 'glm'
                   ? 'your-glm-or-compatible-token'
+                : form.platform === 'coze'
+                  ? 'your-coze-api-token'
                 : form.platform === 'gemini'
                   ? 'AIza...'
                   : 'sk-ant-...'
@@ -3187,6 +3204,7 @@ const oauthStepTitle = computed(() => {
 const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'glm') return t('admin.accounts.openai.baseUrlHint')
+  if (form.platform === 'coze') return 'Coze OpenAI-compatible proxy URL, for example http://127.0.0.1:8788/v1'
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   return t('admin.accounts.baseUrlHint')
 })
@@ -3194,6 +3212,7 @@ const baseUrlHint = computed(() => {
 const apiKeyHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
   if (form.platform === 'glm') return t('admin.accounts.openai.apiKeyHint')
+  if (form.platform === 'coze') return 'Coze API Token. coze2openai forwards this token to Coze.'
   if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
   return t('admin.accounts.apiKeyHint')
 })
@@ -3617,6 +3636,8 @@ watch(
         ? 'https://api.openai.com'
         : newPlatform === 'glm'
           ? 'https://open.bigmodel.cn/api/paas/v4'
+        : newPlatform === 'coze'
+          ? 'http://127.0.0.1:8788/v1'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3644,7 +3665,7 @@ watch(
     if (newPlatform !== 'anthropic' && accountCategory.value === 'bedrock') {
       accountCategory.value = 'oauth-based'
     }
-    if (newPlatform === 'glm') {
+    if (newPlatform === 'glm' || newPlatform === 'coze') {
       accountCategory.value = 'apikey'
     }
     // Reset Bedrock fields when switching platforms
@@ -4411,6 +4432,8 @@ const handleSubmit = async () => {
       ? 'https://api.openai.com'
       : form.platform === 'glm'
         ? 'https://open.bigmodel.cn/api/paas/v4'
+      : form.platform === 'coze'
+        ? 'http://127.0.0.1:8788/v1'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com'

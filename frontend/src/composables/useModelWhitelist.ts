@@ -350,6 +350,7 @@ export const commonErrorCodes = [
 export function getModelsByPlatform(platform: string): string[] {
   switch (platform) {
     case 'openai': return openaiModels
+    case 'coze': return ['coze-shell']
     case 'anthropic':
     case 'claude': return claudeModels
     case 'gemini': return geminiModels
@@ -377,6 +378,9 @@ export function getModelsByPlatform(platform: string): string[] {
 // 按平台获取预设映射
 export function getPresetMappingsByPlatform(platform: string) {
   if (platform === 'openai') return openaiPresetMappings
+  if (platform === 'coze') {
+    return [{ label: 'All Coze requests -> coze-shell', from: '*', to: 'coze-shell', color: 'cyan' }]
+  }
   if (platform === 'gemini') return geminiPresetMappings
   if (platform === 'antigravity') return antigravityPresetMappings
   if (platform === 'bedrock') return bedrockPresetMappings

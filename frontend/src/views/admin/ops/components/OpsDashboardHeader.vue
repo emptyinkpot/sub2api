@@ -110,6 +110,7 @@ const platformOptions = computed(() => [
   { value: '', label: t('common.all') },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
+  { value: 'coze', label: 'Coze' },
   { value: 'gemini', label: 'Gemini' },
   { value: 'antigravity', label: 'Antigravity' }
 ])
