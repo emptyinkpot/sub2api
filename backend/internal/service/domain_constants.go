@@ -65,7 +65,7 @@ func IsAllowedQuotaPlatform(s string) bool {
 }
 
 func IsOpenAICompatiblePlatform(platform string) bool {
-	return platform == PlatformOpenAI || platform == PlatformGLM
+	return platform == PlatformOpenAI || platform == PlatformGLM || platform == PlatformCoze
 }
 
 // Account type constants

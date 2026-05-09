@@ -697,10 +697,14 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 }
 
 func (s *AccountTestService) testGLMAccountConnection(c *gin.Context, account *Account, modelID string) error {
+	return s.testOpenAICompatibleAPIKeyConnection(c, account, modelID, glm.DefaultTestModel, glm.DefaultBaseURL)
+}
+
+func (s *AccountTestService) testOpenAICompatibleAPIKeyConnection(c *gin.Context, account *Account, modelID string, defaultModel string, defaultBaseURL string) error {
 	ctx := c.Request.Context()
 	testModelID := strings.TrimSpace(modelID)
 	if testModelID == "" {
-		testModelID = glm.DefaultTestModel
+		testModelID = defaultModel
 	}
 	testModelID = account.GetMappedModel(testModelID)
 
@@ -711,7 +715,7 @@ func (s *AccountTestService) testGLMAccountConnection(c *gin.Context, account *A
 
 	baseURL := account.GetOpenAIBaseURL()
 	if baseURL == "" {
-		baseURL = glm.DefaultBaseURL
+		baseURL = defaultBaseURL
 	}
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
