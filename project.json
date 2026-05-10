@@ -126,6 +126,12 @@
   },
   "documentation": {
     "humanReadme": "README.md",
+    "repositoryStandard": "docs/REPOSITORY_STANDARD.md",
+    "contributing": "CONTRIBUTING.md",
+    "security": "SECURITY.md",
+    "support": "SUPPORT.md",
+    "changelog": "CHANGELOG.md",
+    "productionRunbook": "docs/runtime/production-runbook.md",
     "primaryLanguage": "zh-CN",
     "notes": [
       "README.md is the sole canonical human-facing project guide in Chinese.",
