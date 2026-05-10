@@ -28,6 +28,7 @@ status: canonical
 projectName: sub2api
 canonicalDoc: README.md
 machineReadableEntry: project.json
+productionRunbook: docs/runtime/production-runbook.md
 localSourceRoot: E:\My Project\sub2api
 owningWorkspaceRoot: E:\My Project
 projectType: ai api gateway platform
@@ -41,12 +42,15 @@ serverHost: 170.106.179.226
 serverRuntimeRoot: /srv/sub2api
 runtimeMode: docker-compose
 nginxSite: /etc/nginx/sites-enabled/sub2api.tengokukk.com
+publicPorts: 443/tcp, 80/tcp
+internalAppPort: 8080/tcp
 githubUpstream: https://github.com/Wei-Shaw/sub2api.git
 githubFork: https://github.com/emptyinkpot/sub2api.git
 defaultPushRemote: origin
 ```
 
 - 人类优先读取 `README.md`；机器优先读取 `project.json`。
+- 当前生产部署、端口、Key、账号、分组和 Mortis 对齐说明见 `docs/runtime/production-runbook.md`。
 - 当前这份 README 同时承担项目介绍、当前公网部署说明、以及账号导入规范入口。
 - 当前已验证的自托管公网入口为 `https://sub2api.tengokukk.com/`，健康检查入口为 `GET https://sub2api.tengokukk.com/health`。
 
@@ -86,8 +90,34 @@ MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
 | 当前部署方式 | `docker-compose` |
 | 当前 nginx site | `/etc/nginx/sites-enabled/sub2api.tengokukk.com` |
 | 当前证书目录 | `/etc/letsencrypt/live/sub2api.tengokukk.com/` |
+| 当前公网端口 | `443/tcp`，`80/tcp` |
+| 当前内部应用端口 | `8080/tcp`，由 nginx 反代到 `http://127.0.0.1:8080` |
+| 当前 OpenAI-compatible 客户端入口 | `https://sub2api.tengokukk.com/v1` |
+| 当前生产运维 Runbook | `docs/runtime/production-runbook.md` |
 | 当前 GitHub 上游 | `https://github.com/Wei-Shaw/sub2api.git` |
 | 当前 GitHub fork | `https://github.com/emptyinkpot/sub2api.git` |
+
+## 生产接入速查
+
+当前生产接入的唯一公网入口是：
+
+```text
+https://sub2api.tengokukk.com/v1
+```
+
+客户端使用 sub2api 颁发的 API Key：
+
+```http
+Authorization: Bearer <sub2api-issued-key>
+```
+
+供应关系：
+
+- Mortis、Telegram、n8n、FuckVideo 等客户端只拿 sub2api key。
+- sub2api 管理真实上游账号、分组、配额、调度、模型映射和用量记录。
+- 真实 GLM/OpenAI/Coze 等 provider key 只进入 sub2api 账号凭证或服务器 secret store，不进入下游仓库。
+
+账号、分组、客户端 key 创建步骤见 `docs/runtime/production-runbook.md`。
 
 ## 在线体验
 

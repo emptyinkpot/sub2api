@@ -2,6 +2,7 @@
   "projectName": "sub2api",
   "canonicalDoc": "README.md",
   "machineReadableEntry": "project.json",
+  "productionRunbook": "docs/runtime/production-runbook.md",
   "localSourceRoot": "E:\\My Project\\sub2api",
   "owningWorkspaceRoot": "E:\\My Project",
   "projectType": "ai-api-gateway-platform",
@@ -100,6 +101,12 @@
     "testCommand": "make test",
     "publicHostPort": 80,
     "publicTlsPort": 443,
+    "clientOpenAICompatibleBaseUrl": "https://sub2api.tengokukk.com/v1",
+    "publicPorts": [
+      443,
+      80
+    ],
+    "internalAppPort": 8080,
     "healthPath": "/health",
     "deploymentModes": [
       "script-install",
@@ -135,8 +142,25 @@
     "nginxSite": "/etc/nginx/sites-enabled/sub2api.tengokukk.com",
     "tlsLivePath": "/etc/letsencrypt/live/sub2api.tengokukk.com",
     "proxyTarget": "http://127.0.0.1:8080",
+    "clientOpenAICompatibleBaseUrl": "https://sub2api.tengokukk.com/v1",
     "bootstrapMode": "https-live",
     "activatedAt": "2026-05-01"
+  },
+  "consumerContract": {
+    "role": "upstream-ai-api-gateway",
+    "clientBaseUrl": "https://sub2api.tengokukk.com/v1",
+    "authHeader": "Authorization: Bearer <sub2api-issued-key>",
+    "consumers": [
+      "Mortis",
+      "Telegram",
+      "n8n",
+      "FuckVideo"
+    ],
+    "principles": [
+      "Consumers receive Sub2API-issued keys, not raw provider keys.",
+      "Provider keys belong in Sub2API account credentials or deployment secret stores.",
+      "Groups define routing, quota, scheduling, and consumer isolation."
+    ]
   },
   "dnsPlan": {
     "mode": "tengokukk-shared-apex-dedicated-subdomain",
