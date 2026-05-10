@@ -112,6 +112,18 @@ func RegisterGatewayRoutes(
 			}
 			h.OpenAIGateway.Images(c)
 		})
+		gateway.POST("/embeddings", func(c *gin.Context) {
+			if !service.IsOpenAICompatiblePlatform(getGroupPlatform(c)) {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Embeddings API is not supported for this platform",
+					},
+				})
+				return
+			}
+			h.OpenAIGateway.Embeddings(c)
+		})
 	}
 
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
@@ -178,6 +190,18 @@ func RegisterGatewayRoutes(
 			return
 		}
 		h.OpenAIGateway.Images(c)
+	})
+	r.POST("/embeddings", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+		if !service.IsOpenAICompatiblePlatform(getGroupPlatform(c)) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Embeddings API is not supported for this platform",
+				},
+			})
+			return
+		}
+		h.OpenAIGateway.Embeddings(c)
 	})
 
 	// Antigravity 模型列表

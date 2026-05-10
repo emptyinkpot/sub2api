@@ -50,6 +50,27 @@ defaultPushRemote: origin
 - 当前这份 README 同时承担项目介绍、当前公网部署说明、以及账号导入规范入口。
 - 当前已验证的自托管公网入口为 `https://sub2api.tengokukk.com/`，健康检查入口为 `GET https://sub2api.tengokukk.com/health`。
 
+## 下游供应关系
+
+本仓库是 `FuckVideo` / `E:\My Project\remotion-project` 的上游 AI API 网关，不是视频剪辑业务仓库。
+
+供应边界：
+
+- sub2api 负责账号、分组、配额、调度、模型映射、OpenAI-compatible API 暴露。
+- FuckVideo 负责素材理解、向量入库、检索、时间轴编排、Remotion 渲染。
+- FuckVideo 的 hosted embedding 默认应优先指向 sub2api 的 OpenAI-compatible `/v1/embeddings`，再由 sub2api 路由到 GLM、OpenAI 或其它兼容账号。
+
+对接示例：
+
+```env
+MATERIAL_EMBEDDING_BACKEND=openai-compatible
+MATERIAL_EMBEDDING_API_BASE_URL=https://sub2api.tengokukk.com/v1
+MATERIAL_EMBEDDING_API_MODEL=<embedding-model-exposed-by-sub2api>
+MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
+```
+
+注意：GLM 聊天模型 key 不能自动等价于 embedding key。要让 FuckVideo 做素材向量检索，sub2api 分组内必须有可用的 embedding 模型映射，并通过 `/v1/embeddings` 返回 OpenAI-compatible embedding 响应。
+
 ## 当前运行信息卡
 
 | 项目 | 值 |

@@ -24,6 +24,7 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		// Direct canonical paths.
 		{"/v1/messages", EndpointMessages},
 		{"/v1/chat/completions", EndpointChatCompletions},
+		{"/v1/embeddings", EndpointEmbeddings},
 		{"/v1/responses", EndpointResponses},
 		{"/v1/images/generations", EndpointImagesGenerations},
 		{"/v1/images/edits", EndpointImagesEdits},
@@ -77,6 +78,8 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		{"openai responses nested", EndpointResponses, "/openai/v1/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact/detail"},
 		{"openai from messages", EndpointMessages, "/v1/messages", service.PlatformOpenAI, EndpointResponses},
 		{"openai from completions", EndpointChatCompletions, "/v1/chat/completions", service.PlatformOpenAI, EndpointResponses},
+		{"openai embeddings", EndpointEmbeddings, "/v1/embeddings", service.PlatformOpenAI, EndpointEmbeddings},
+		{"glm embeddings", EndpointEmbeddings, "/v1/embeddings", service.PlatformGLM, EndpointEmbeddings},
 		{"openai image generations", EndpointImagesGenerations, "/v1/images/generations", service.PlatformOpenAI, EndpointImagesGenerations},
 		{"openai image edits", EndpointImagesEdits, "/openai/v1/images/edits", service.PlatformOpenAI, EndpointImagesEdits},
 
@@ -85,7 +88,7 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		{"antigravity gemini", EndpointGeminiModels, "/antigravity/v1beta/models", service.PlatformAntigravity, EndpointGeminiModels},
 
 		// Unknown platform — passthrough.
-		{"unknown platform", "/v1/embeddings", "/v1/embeddings", "unknown", "/v1/embeddings"},
+		{"unknown platform", EndpointEmbeddings, "/v1/embeddings", "unknown", EndpointEmbeddings},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
