@@ -51,6 +51,7 @@ defaultPushRemote: origin
 
 - 人类优先读取 `README.md`；机器优先读取 `project.json`。
 - 当前生产部署、端口、Key、账号、分组和 Mortis 对齐说明见 `docs/runtime/production-runbook.md`。
+- API 合同速查见 `docs/API_CONTRACT.md`；后续正式 OpenAPI 应从这里演进。
 - 仓库质量标准、贡献规则、安全边界和支持入口见 `docs/REPOSITORY_STANDARD.md`、`CONTRIBUTING.md`、`SECURITY.md`、`SUPPORT.md`。
 - 当前这份 README 同时承担项目介绍、当前公网部署说明、以及账号导入规范入口。
 - 当前已验证的自托管公网入口为 `https://sub2api.tengokukk.com/`，健康检查入口为 `GET https://sub2api.tengokukk.com/health`。
@@ -95,6 +96,7 @@ MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
 | 当前内部应用端口 | `8080/tcp`，由 nginx 反代到 `http://127.0.0.1:8080` |
 | 当前 OpenAI-compatible 客户端入口 | `https://sub2api.tengokukk.com/v1` |
 | 当前生产运维 Runbook | `docs/runtime/production-runbook.md` |
+| 当前 API 合同速查 | `docs/API_CONTRACT.md` |
 | 当前仓库质量标准 | `docs/REPOSITORY_STANDARD.md` |
 | 当前贡献规则 | `CONTRIBUTING.md` |
 | 当前安全策略 | `SECURITY.md` |

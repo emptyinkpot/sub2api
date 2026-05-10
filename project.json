@@ -127,6 +127,7 @@
   "documentation": {
     "humanReadme": "README.md",
     "repositoryStandard": "docs/REPOSITORY_STANDARD.md",
+    "apiContract": "docs/API_CONTRACT.md",
     "contributing": "CONTRIBUTING.md",
     "security": "SECURITY.md",
     "support": "SUPPORT.md",

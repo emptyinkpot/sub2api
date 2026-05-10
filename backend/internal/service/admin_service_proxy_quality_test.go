@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,4 +94,94 @@ func TestRunProxyQualityTarget_AllowedStatusWarnForUnauthorized(t *testing.T) {
 	require.Equal(t, "warn", item.Status)
 	require.Equal(t, http.StatusUnauthorized, item.HTTPStatus)
 	require.Contains(t, item.Message, "目标可达")
+}
+
+func TestAdminServiceGetProxyRiskSummary(t *testing.T) {
+	now := time.Now().Unix()
+	healthyScore := 95
+	warnScore := 72
+	staleChecked := now - 25*60*60
+	freshChecked := now - 60
+
+	svc := &adminServiceImpl{
+		proxyRepo: &proxyRiskSummaryRepoStub{
+			proxies: []ProxyWithAccountCount{
+				{
+					Proxy:          Proxy{ID: 1, Name: "healthy", Status: StatusActive},
+					AccountCount:   2,
+					QualityStatus:  "healthy",
+					QualityScore:   &healthyScore,
+					QualityChecked: &freshChecked,
+				},
+				{
+					Proxy:          Proxy{ID: 2, Name: "warn", Status: StatusActive},
+					AccountCount:   1,
+					QualityStatus:  "warn",
+					QualityScore:   &warnScore,
+					QualityChecked: &staleChecked,
+				},
+				{
+					Proxy:        Proxy{ID: 3, Name: "unknown", Status: StatusActive},
+					AccountCount: 0,
+				},
+			},
+		},
+	}
+
+	summary, err := svc.GetProxyRiskSummary(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 3, summary.Total)
+	require.Equal(t, 1, summary.Healthy)
+	require.Equal(t, 1, summary.Warn)
+	require.Equal(t, 0, summary.Failed)
+	require.Equal(t, 0, summary.Challenge)
+	require.Equal(t, 1, summary.Unknown)
+	require.Equal(t, 2, summary.StaleCount)
+	require.NotNil(t, summary.AverageScore)
+	require.InDelta(t, 83.5, *summary.AverageScore, 0.001)
+	require.NotNil(t, summary.OldestCheckedAt)
+	require.Equal(t, staleChecked, *summary.OldestCheckedAt)
+	require.Len(t, summary.RiskyProxies, 2)
+	require.Equal(t, int64(2), summary.RiskyProxies[0].ID)
+	require.Equal(t, "warn", summary.RiskyProxies[0].QualityStatus)
+	require.Equal(t, int64(3), summary.RiskyProxies[1].ID)
+	require.Equal(t, "unknown", summary.RiskyProxies[1].QualityStatus)
+}
+
+type proxyRiskSummaryRepoStub struct {
+	proxies []ProxyWithAccountCount
+}
+
+func (s *proxyRiskSummaryRepoStub) Create(context.Context, *Proxy) error { panic("unexpected Create") }
+func (s *proxyRiskSummaryRepoStub) GetByID(context.Context, int64) (*Proxy, error) {
+	panic("unexpected GetByID")
+}
+func (s *proxyRiskSummaryRepoStub) ListByIDs(context.Context, []int64) ([]Proxy, error) {
+	panic("unexpected ListByIDs")
+}
+func (s *proxyRiskSummaryRepoStub) Update(context.Context, *Proxy) error { panic("unexpected Update") }
+func (s *proxyRiskSummaryRepoStub) Delete(context.Context, int64) error  { panic("unexpected Delete") }
+func (s *proxyRiskSummaryRepoStub) List(context.Context, pagination.PaginationParams) ([]Proxy, *pagination.PaginationResult, error) {
+	panic("unexpected List")
+}
+func (s *proxyRiskSummaryRepoStub) ListWithFilters(context.Context, pagination.PaginationParams, string, string, string) ([]Proxy, *pagination.PaginationResult, error) {
+	panic("unexpected ListWithFilters")
+}
+func (s *proxyRiskSummaryRepoStub) ListWithFiltersAndAccountCount(context.Context, pagination.PaginationParams, string, string, string) ([]ProxyWithAccountCount, *pagination.PaginationResult, error) {
+	panic("unexpected ListWithFiltersAndAccountCount")
+}
+func (s *proxyRiskSummaryRepoStub) ListActive(context.Context) ([]Proxy, error) {
+	panic("unexpected ListActive")
+}
+func (s *proxyRiskSummaryRepoStub) ListActiveWithAccountCount(context.Context) ([]ProxyWithAccountCount, error) {
+	return s.proxies, nil
+}
+func (s *proxyRiskSummaryRepoStub) ExistsByHostPortAuth(context.Context, string, int, string, string) (bool, error) {
+	panic("unexpected ExistsByHostPortAuth")
+}
+func (s *proxyRiskSummaryRepoStub) CountAccountsByProxyID(context.Context, int64) (int64, error) {
+	panic("unexpected CountAccountsByProxyID")
+}
+func (s *proxyRiskSummaryRepoStub) ListAccountSummariesByProxyID(context.Context, int64) ([]ProxyAccountSummary, error) {
+	panic("unexpected ListAccountSummariesByProxyID")
 }
