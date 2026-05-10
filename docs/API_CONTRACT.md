@@ -132,6 +132,18 @@ MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
 SUB2API_API_KEY=<sub2api-issued-key>
 ```
 
+DataBase data curation:
+
+```env
+DATA_CURATION_OPENAI_BASE_URL=https://sub2api.tengokukk.com/v1
+DATA_CURATION_OPENAI_API_KEY=<sub2api-issued-key>
+DATA_CURATION_MODEL=glm-4-flash
+```
+
+The DataBase worker calls `POST /v1/chat/completions` for replaceable semantic
+cleaning and labeling. DataBase owns the stored personal data and curation
+tables; Sub2API only owns the model gateway and credential routing contract.
+
 ## Next Step
 
 The next quality step is to generate a formal OpenAPI document from backend route definitions or maintain one manually under `docs/openapi/`.

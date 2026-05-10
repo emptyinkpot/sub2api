@@ -77,6 +77,20 @@ MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
 
 注意：GLM 聊天模型 key 不能自动等价于 embedding key。要让 FuckVideo 做素材向量检索，sub2api 分组内必须有可用的 embedding 模型映射，并通过 `/v1/embeddings` 返回 OpenAI-compatible embedding 响应。
 
+## DataBase 清洗供应关系
+
+本仓库也是 `DataBase` / `E:\My Project\DataBase` 的上游模型网关。DataBase 存储真实个人数据和清洗标注结果；sub2api 只负责 OpenAI-compatible 模型调用、账号池、配额、模型映射和 API key。
+
+DataBase 默认通过以下环境变量调用：
+
+```env
+DATA_CURATION_OPENAI_BASE_URL=https://sub2api.tengokukk.com/v1
+DATA_CURATION_OPENAI_API_KEY=<sub2api-issued-key>
+DATA_CURATION_MODEL=glm-4-flash
+```
+
+详细合同见 `docs/runtime/database-data-curation-consumer.md`。Codex 维护脚本和 schema，批量语义清洗默认走 sub2api 后面的 GLM 或其他可替换模型。
+
 ## 当前运行信息卡
 
 | 项目 | 值 |
