@@ -112,6 +112,7 @@ type AdminService interface {
 	CheckProxyExists(ctx context.Context, host string, port int, username, password string) (bool, error)
 	TestProxy(ctx context.Context, id int64) (*ProxyTestResult, error)
 	CheckProxyQuality(ctx context.Context, id int64) (*ProxyQualityCheckResult, error)
+	GetProxyRiskSummary(ctx context.Context) (*ProxyRiskSummary, error)
 
 	// Redeem code management
 	ListRedeemCodes(ctx context.Context, page, pageSize int, codeType, status, search string, sortBy, sortOrder string) ([]RedeemCode, int64, error)
@@ -457,6 +458,35 @@ type ProxyQualityCheckItem struct {
 	LatencyMs  int64  `json:"latency_ms,omitempty"`
 	Message    string `json:"message,omitempty"`
 	CFRay      string `json:"cf_ray,omitempty"`
+}
+
+type ProxyRiskSummary struct {
+	Total             int                    `json:"total"`
+	Healthy           int                    `json:"healthy"`
+	Warn              int                    `json:"warn"`
+	Failed            int                    `json:"failed"`
+	Challenge         int                    `json:"challenge"`
+	Unknown           int                    `json:"unknown"`
+	AverageScore      *float64               `json:"average_score,omitempty"`
+	OldestCheckedAt   *int64                 `json:"oldest_checked_at,omitempty"`
+	StaleCount        int                    `json:"stale_count"`
+	RiskyProxies      []ProxyRiskSummaryItem `json:"risky_proxies"`
+	GeneratedAt       int64                  `json:"generated_at"`
+	StaleAfterSeconds int64                  `json:"stale_after_seconds"`
+}
+
+type ProxyRiskSummaryItem struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	QualityStatus  string `json:"quality_status"`
+	QualityScore   *int   `json:"quality_score,omitempty"`
+	QualityGrade   string `json:"quality_grade,omitempty"`
+	QualitySummary string `json:"quality_summary,omitempty"`
+	QualityChecked *int64 `json:"quality_checked,omitempty"`
+	IPAddress      string `json:"ip_address,omitempty"`
+	CountryCode    string `json:"country_code,omitempty"`
+	AccountCount   int64  `json:"account_count"`
 }
 
 // ProxyExitInfo represents proxy exit information from ip-api.com
@@ -2957,6 +2987,77 @@ func (s *adminServiceImpl) GetAllProxiesWithAccountCount(ctx context.Context) ([
 	return proxies, nil
 }
 
+func (s *adminServiceImpl) GetProxyRiskSummary(ctx context.Context) (*ProxyRiskSummary, error) {
+	proxies, err := s.proxyRepo.ListActiveWithAccountCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.attachProxyLatency(ctx, proxies)
+
+	now := time.Now().Unix()
+	const staleAfterSeconds int64 = 24 * 60 * 60
+	summary := &ProxyRiskSummary{
+		Total:             len(proxies),
+		RiskyProxies:      make([]ProxyRiskSummaryItem, 0),
+		GeneratedAt:       now,
+		StaleAfterSeconds: staleAfterSeconds,
+	}
+
+	scoreTotal := 0
+	scoreCount := 0
+	for i := range proxies {
+		proxy := proxies[i]
+		status := normalizeProxyRiskStatus(proxy.QualityStatus)
+		switch status {
+		case "healthy":
+			summary.Healthy++
+		case "warn":
+			summary.Warn++
+		case "failed":
+			summary.Failed++
+		case "challenge":
+			summary.Challenge++
+		default:
+			summary.Unknown++
+		}
+
+		if proxy.QualityScore != nil {
+			scoreTotal += *proxy.QualityScore
+			scoreCount++
+		}
+		if proxy.QualityChecked == nil || *proxy.QualityChecked <= 0 || now-*proxy.QualityChecked > staleAfterSeconds {
+			summary.StaleCount++
+		}
+		if proxy.QualityChecked != nil && *proxy.QualityChecked > 0 {
+			if summary.OldestCheckedAt == nil || *proxy.QualityChecked < *summary.OldestCheckedAt {
+				checkedAt := *proxy.QualityChecked
+				summary.OldestCheckedAt = &checkedAt
+			}
+		}
+		if status != "healthy" {
+			summary.RiskyProxies = append(summary.RiskyProxies, ProxyRiskSummaryItem{
+				ID:             proxy.ID,
+				Name:           proxy.Name,
+				Status:         proxy.Status,
+				QualityStatus:  status,
+				QualityScore:   proxy.QualityScore,
+				QualityGrade:   proxy.QualityGrade,
+				QualitySummary: proxy.QualitySummary,
+				QualityChecked: proxy.QualityChecked,
+				IPAddress:      proxy.IPAddress,
+				CountryCode:    proxy.CountryCode,
+				AccountCount:   proxy.AccountCount,
+			})
+		}
+	}
+	if scoreCount > 0 {
+		avg := float64(scoreTotal) / float64(scoreCount)
+		summary.AverageScore = &avg
+	}
+
+	return summary, nil
+}
+
 func (s *adminServiceImpl) GetProxy(ctx context.Context, id int64) (*Proxy, error) {
 	return s.proxyRepo.GetByID(ctx, id)
 }
@@ -3411,6 +3512,21 @@ func proxyQualityOverallStatus(result *ProxyQualityCheckResult) string {
 		return "healthy"
 	}
 	return "failed"
+}
+
+func normalizeProxyRiskStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "healthy", "pass", "success":
+		return "healthy"
+	case "warn", "warning":
+		return "warn"
+	case "failed", "fail", "error":
+		return "failed"
+	case "challenge":
+		return "challenge"
+	default:
+		return "unknown"
+	}
 }
 
 func proxyQualityFirstCFRay(result *ProxyQualityCheckResult) string {

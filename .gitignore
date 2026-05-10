@@ -131,6 +131,9 @@ docs/*
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/PROVIDER_RUNTIME_DASHBOARD_CN.md
+!docs/API_CONTRACT.md
+!docs/REPOSITORY_STANDARD.md
 .serena/
 .codex/
 frontend/coverage/
