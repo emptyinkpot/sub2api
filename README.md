@@ -5,91 +5,39 @@ title: sub2api
 status: canonical
 ---
 
-<div align="center">
+Sub2API 是一个 AI API 网关平台：对外提供统一管理后台，对内负责账号、代理、路由、计费和转发。
 
-[![Go](https://img.shields.io/badge/Go-1.25.7-00ADD8.svg)](https://golang.org/)
-[![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791.svg)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+这份 `README.md` 是人类入口文档；`project.json` 是机器可读真相入口。
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Wei-Shaw%2Fsub2api | Trendshift" width="250" height="55"/></a>
+## 0. 项目说明入口
 
-**AI API 网关平台 - 订阅配额分发管理**
+- 源码仓库：`https://github.com/Wei-Shaw/sub2api.git`
+- 本地源码根：`E:\My Project\sub2api`
+- 生产运行根：`/srv/sub2api`
+- 生产服务入口：`https://sub2api.tengokukk.com/`
+- 生产健康检查：`https://sub2api.tengokukk.com/health`
+- 服务器：`170.106.179.226`
+- 运行方式：`docker-compose`
+- 机器可读入口：`project.json`
 
-</div>
+## 1. Truth Layer
 
-> **Sub2API 官方仅使用  `sub2api.org` 与 `pincc.ai` 两个域名。其他使用 Sub2API 名义的网站可能为第三方部署或服务，与本项目无关，请自行甄别。**
----
+- 当前项目状态：`active`
+- 当前交付模式：`server-https-live`
+- 当前阶段：`public-domain-live-on-170`
+- 当前公共域名：`sub2api.tengokukk.com`
+- 当前 nginx 站点：`/etc/nginx/sites-enabled/sub2api.tengokukk.com`
+- 当前 TLS 目录：`/etc/letsencrypt/live/sub2api.tengokukk.com/`
+- 当前 GitHub fork：`https://github.com/emptyinkpot/sub2api.git`
 
-## 项目说明入口
+## 2. Constraint Layer
 
-```yaml
-projectName: sub2api
-canonicalDoc: README.md
-machineReadableEntry: project.json
-productionRunbook: docs/runtime/production-runbook.md
-localSourceRoot: E:\My Project\sub2api
-owningWorkspaceRoot: E:\My Project
-projectType: ai api gateway platform
-projectStatus: active
-currentDeliveryMode: server-https-live
-currentPhase: public-domain-live-on-170
-publicBaseUrl: https://sub2api.tengokukk.com/
-publicHealthUrl: https://sub2api.tengokukk.com/health
-chosenPublicHost: sub2api.tengokukk.com
-serverHost: 170.106.179.226
-serverRuntimeRoot: /srv/sub2api
-runtimeMode: docker-compose
-nginxSite: /etc/nginx/sites-enabled/sub2api.tengokukk.com
-publicPorts: 443/tcp, 80/tcp
-internalAppPort: 8080/tcp
-githubUpstream: https://github.com/Wei-Shaw/sub2api.git
-githubFork: https://github.com/emptyinkpot/sub2api.git
-defaultPushRemote: origin
-```
-
-- 人类优先读取 `README.md`；机器优先读取 `project.json`。
-- 当前生产部署、端口、Key、账号、分组和 Mortis 对齐说明见 `docs/runtime/production-runbook.md`。
-- API 合同速查见 `docs/API_CONTRACT.md`；后续正式 OpenAPI 应从这里演进。
-- 仓库质量标准、贡献规则、安全边界和支持入口见 `docs/REPOSITORY_STANDARD.md`、`CONTRIBUTING.md`、`SECURITY.md`、`SUPPORT.md`。
-- 当前这份 README 同时承担项目介绍、当前公网部署说明、以及账号导入规范入口。
-- 当前已验证的自托管公网入口为 `https://sub2api.tengokukk.com/`，健康检查入口为 `GET https://sub2api.tengokukk.com/health`。
-
-## 下游供应关系
-
-本仓库是 `FuckVideo` / `E:\My Project\remotion-project` 的上游 AI API 网关，不是视频剪辑业务仓库。
-
-供应边界：
-
-- sub2api 负责账号、分组、配额、调度、模型映射、OpenAI-compatible API 暴露。
-- FuckVideo 负责素材理解、向量入库、检索、时间轴编排、Remotion 渲染。
-- FuckVideo 的 hosted embedding 默认应优先指向 sub2api 的 OpenAI-compatible `/v1/embeddings`，再由 sub2api 路由到 GLM、OpenAI 或其它兼容账号。
-
-对接示例：
-
-```env
-MATERIAL_EMBEDDING_BACKEND=openai-compatible
-MATERIAL_EMBEDDING_API_BASE_URL=https://sub2api.tengokukk.com/v1
-MATERIAL_EMBEDDING_API_MODEL=<embedding-model-exposed-by-sub2api>
-MATERIAL_EMBEDDING_API_KEY_ENV=SUB2API_API_KEY
-```
-
-注意：GLM 聊天模型 key 不能自动等价于 embedding key。要让 FuckVideo 做素材向量检索，sub2api 分组内必须有可用的 embedding 模型映射，并通过 `/v1/embeddings` 返回 OpenAI-compatible embedding 响应。
-
-## DataBase 清洗供应关系
-
-本仓库也是 `DataBase` / `E:\My Project\DataBase` 的上游模型网关。DataBase 存储真实个人数据和清洗标注结果；sub2api 只负责 OpenAI-compatible 模型调用、账号池、配额、模型映射和 API key。
-
-DataBase 默认通过以下环境变量调用：
-
-```env
-DATA_CURATION_OPENAI_BASE_URL=https://sub2api.tengokukk.com/v1
-DATA_CURATION_OPENAI_API_KEY=<sub2api-issued-key>
-DATA_CURATION_MODEL=glm-4-flash
-```
-
-详细合同见 `docs/runtime/database-data-curation-consumer.md`。Codex 维护脚本和 schema，批量语义清洗默认走 sub2api 后面的 GLM 或其他可替换模型。
+- 人类优先读取 `README.md`；机器优先读取 `project.json`
+- 这两个文件必须描述同一份运行真相
+- 运行时修复优先走 `POST /api/reload-config`
+- 只有热重载不生效时才考虑 `POST /api/restart-service`
+- 仅前端静态页变更时，优先更新 `data/public/` 覆盖文件，不必重启后端
+- 账号导入规范入口见 `project.json` 的 `openaiOAuthAccountImport`
 
 ## 当前运行信息卡
 
@@ -106,39 +54,42 @@ DATA_CURATION_MODEL=glm-4-flash
 | 当前部署方式 | `docker-compose` |
 | 当前 nginx site | `/etc/nginx/sites-enabled/sub2api.tengokukk.com` |
 | 当前证书目录 | `/etc/letsencrypt/live/sub2api.tengokukk.com/` |
-| 当前公网端口 | `443/tcp`，`80/tcp` |
-| 当前内部应用端口 | `8080/tcp`，由 nginx 反代到 `http://127.0.0.1:8080` |
-| 当前 OpenAI-compatible 客户端入口 | `https://sub2api.tengokukk.com/v1` |
-| 当前生产运维 Runbook | `docs/runtime/production-runbook.md` |
-| 当前 API 合同速查 | `docs/API_CONTRACT.md` |
-| 当前仓库质量标准 | `docs/REPOSITORY_STANDARD.md` |
-| 当前贡献规则 | `CONTRIBUTING.md` |
-| 当前安全策略 | `SECURITY.md` |
-| 当前支持入口 | `SUPPORT.md` |
 | 当前 GitHub 上游 | `https://github.com/Wei-Shaw/sub2api.git` |
 | 当前 GitHub fork | `https://github.com/emptyinkpot/sub2api.git` |
 
-## 生产接入速查
+## 运维止血规则
 
-当前生产接入的唯一公网入口是：
+当系统已经上线且面板提示路由/上游风险时，默认按下面顺序处理，目标是先恢复真实流量，再谈监控展示：
 
-```text
-https://sub2api.tengokukk.com/v1
-```
+1. 先确认运行态是否已经吃到最新配置
+   - 远端查看 `/srv/sub2api/configs/runtime-overrides.json`
+   - 再看 `GET /api/config`
+   - 最后用 `POST /api/config/routing-debug` 验证目标模型实际路由到了哪个 provider family
 
-客户端使用 sub2api 颁发的 API Key：
+2. 优先执行热重载
+   - 首选 `POST /api/reload-config`
+   - 这一步会重新加载配置文件，适合修正 `runtime-overrides.json`、`config.json`、provider pool 这类运行时配置
+   - 只要进程还活着，重载优先于重启
 
-```http
-Authorization: Bearer <sub2api-issued-key>
-```
+3. 只有热重载不生效时才重启
+   - 需要硬刷新进程时，再执行 `POST /api/restart-service`
+   - systemd 部署环境下，等价的最后手段是重启 `token-pool-gateway-prod.service`
+   - 这一步会带来短暂中断，不应作为第一响应
 
-供应关系：
+4. 验证是否止血
+   - 重新调用 `POST /api/config/routing-debug`
+   - 确认错误模型已经不再落到坏池子
+   - 再观察面板里的错误率、SLA 和首 Token 时间是否开始回落
 
-- Mortis、Telegram、n8n、FuckVideo 等客户端只拿 sub2api key。
-- sub2api 管理真实上游账号、分组、配额、调度、模型映射和用量记录。
-- 真实 GLM/OpenAI/Coze 等 provider key 只进入 sub2api 账号凭证或服务器 secret store，不进入下游仓库。
+### 命令理解约定
 
-账号、分组、客户端 key 创建步骤见 `docs/runtime/production-runbook.md`。
+以后我会按下面方式理解这类命令：
+
+- “看看远端是否吃到配置” = 先读远端配置文件，再查 `/api/config`，再跑 `routing-debug`
+- “先修复再观察” = 先改运行时路由或配置，不先改面板统计
+- “重载” = 只重新加载配置，不重启整服务
+- “重启” = 仅在重载无效、进程异常或运行态不同步时使用
+- “继续” = 继续上一个未完成的运维修复链路，不回头重做已经验证过的监控侧修补
 
 ## 在线体验
 
@@ -153,57 +104,6 @@ Authorization: Bearer <sub2api-issued-key>
 ## 项目概述
 
 Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
-
-### 当前定位边界
-
-Sub2API 当前首先是一个**专业级 AI API 中转网关**，核心问题是把上游账号、模型、额度和用户请求稳定地组织起来，而不是宣称自己已经是完整的 Agent Runtime 或 Workflow Runtime。
-
-当前定位：
-
-```text
-AI API Gateway with Account Pool & Billing
-```
-
-也就是：
-
-- API 中转与协议兼容
-- 上游账号池管理
-- 用户 API Key 与权限控制
-- Token 用量、额度、计费与支付
-- 基础调度、重试、并发与速率限制
-- 管理后台与基础运营视图
-
-短期演进方向是把“中转站”做得更透明、更稳定、更可运营；长期可以向更强的 Gateway Platform 演进，但 `session runtime`、`workflow runtime`、`agent runtime`、`tool execution` 等能力在当前阶段不应作为既有能力描述。
-
-### 近期路线
-
-P0 是运行透明度和运营稳定性：
-
-- Provider / 账号健康状态
-- 请求延迟、失败率、重试次数
-- Token 吞吐、成本与额度消耗
-- Account Health Score
-- 错误分类与可追踪请求日志
-- Fallback / Retry 可视化
-
-P0 的实施设计见 [`docs/PROVIDER_RUNTIME_DASHBOARD_CN.md`](docs/PROVIDER_RUNTIME_DASHBOARD_CN.md)。
-
-P1 是网关调度能力：
-
-- Model Registry
-- Provider Registry
-- Weighted Routing
-- Quota-aware Routing
-- Account Affinity
-- Fallback Chain
-
-P2 才进入更接近 Runtime 的能力：
-
-- Sticky Session
-- Session Budget
-- Request Replay
-- Semantic Cache
-- Tool-call Pass-through
 
 ### 当前自托管公网状态
 
@@ -953,3 +853,243 @@ Copyright (c) 2026 Wesley Liddick
 **如果觉得有用，请给个 Star 支持一下！**
 
 </div>
+
+
+
+
+
+
+
+
+
+
+
+明白了，你要的是一个**前端完整的框架**，而不是控制 AI 的行为。你现在需要的是解决前端布局问题，确保**不会出现横向滚动、不会出现重叠**，并且**在修复过程中不破坏其他功能**。我直接给你一个**完整的前端框架**，没有任何其他干扰。
+
+### 目标：
+
+1. **去除横向滚动**
+2. **修复文字重叠问题**
+3. **稳定的布局设计**
+4. **保持功能不受影响**
+
+---
+
+# 🔑 **前端框架设计**
+
+## 1. **布局策略**
+
+为了保证不出现横向滚动和文字溢出，需要在页面的布局设计中锁定列宽，并控制表格结构的最大宽度。
+
+### **表格布局**
+
+使用 **`table-layout: fixed`** 来保证列宽固定，不会因内容过长而撑大表格。
+
+```css
+/* 强制表格布局固定，宽度百分比，避免横滚 */
+table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+}
+```
+
+### **列宽控制**
+
+设置 `min-width` 来确保每列不会因内容过多而撑开，避免横向滚动。
+
+```css
+/* 为每一列设置最小宽度 */
+td, th {
+  min-width: 120px;
+  max-width: 220px;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+```
+
+---
+
+## 2. **内容溢出与换行**
+
+为了防止文字溢出并保持页面整洁，使用 `white-space: normal` 和 `overflow: hidden` 来控制长文本的显示。
+
+```css
+/* 处理单元格内容溢出 */
+td {
+  word-wrap: break-word; /* 自动换行 */
+  white-space: normal;  /* 允许换行 */
+  overflow: hidden;
+  text-overflow: ellipsis; /* 超出部分显示省略号 */
+}
+```
+
+---
+
+## 3. **响应式设计**
+
+为了适应不同的屏幕宽度，表格和布局要具备**响应式设计**，通过媒体查询控制列的显示和布局。
+
+```css
+/* 屏幕较小时表格列会自动堆叠 */
+@media (max-width: 768px) {
+  table {
+    display: block;
+    overflow-x: auto; /* 小屏幕下可以横向滚动 */
+  }
+
+  td, th {
+    display: block;
+    width: auto; /* 使单元格可变宽度 */
+  }
+}
+```
+
+---
+
+## 4. **列优先显示**
+
+对于表格中的多列数据，限制列宽并确保有较好的可读性，可以使用列优先显示的策略。
+
+```css
+/* 控制一些关键列宽度，避免过长 */
+.today-stats {
+  max-width: 160px;
+}
+
+.usage, .proxy, .notes {
+  max-width: 140px;
+}
+
+.cell-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+```
+
+---
+
+## 5. **UI 组件与卡片**
+
+如果你决定不再使用表格而采用卡片布局，可以用以下方式设计：
+
+```css
+/* 卡片布局 */
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  margin: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  font-size: 1.2rem;
+  margin-bottom: 8px;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-footer {
+  text-align: right;
+}
+```
+
+---
+
+## 6. **功能保证**
+
+* **分页**、**筛选**、**排序**等功能保持不变，确保UI不受影响。
+* **功能类数据展示**可以继续使用表格，**内容展示**可以使用卡片布局，按需切换。
+
+---
+
+# 🔄 **完整前端框架结构**
+
+你可以根据需要决定是使用**表格布局**还是**卡片布局**。两者设计如下：
+
+### **表格布局（稳定，不横滚）**
+
+```html
+<table>
+  <thead>
+    <tr>
+      <th>名称</th>
+      <th>平台</th>
+      <th>状态</th>
+      <th>调度</th>
+      <th>今日统计</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>用户A</td>
+      <td>平台1</td>
+      <td>正常</td>
+      <td>已调度</td>
+      <td>数据</td>
+      <td><button>编辑</button></td>
+    </tr>
+    <!-- 更多行 -->
+  </tbody>
+</table>
+```
+
+### **卡片布局（响应式，更适合展示）**
+
+```html
+<div class="card">
+  <div class="card-header">用户A</div>
+  <div class="card-body">
+    <div>平台: 平台1</div>
+    <div>状态: 正常</div>
+    <div>调度: 已调度</div>
+    <div>今日统计: 数据</div>
+  </div>
+  <div class="card-footer">
+    <button>编辑</button>
+  </div>
+</div>
+```
+
+---
+
+# 🚀 **接下来你需要做的**
+
+1. 选择你需要的布局模式（表格或卡片）
+2. 使用以上的 CSS 样式调整表格或卡片内容，保证：
+
+   * 没有横向滚动条
+   * 文字正常显示
+   * 功能不受影响
+3. 保证**功能逻辑**：排序、筛选等都不受影响，可以继续用表格或卡片展示数据。
+
+---
+
+如果你要进一步定制或者遇到新的问题，可以告诉我，我会继续帮你完善。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

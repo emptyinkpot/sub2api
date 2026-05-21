@@ -1,0 +1,17 @@
+# Declarative consumer lane (no secrets). Secrets: DASHSCOPE_API_KEY env on bootstrap host.
+consumer: contentmrs
+purpose: novel-generation
+group:
+  name: contentmrs-novel-qwen
+  platform: openai
+  description: ContentMRS Tier-1 novel/article generation (Qwen via DashScope)
+  is_exclusive: true
+  subscription_type: standard
+upstream:
+  provider_id: dashscope
+  account_name: contentmrs-novel-qwen-upstream
+client_key:
+  name: contentmrs-novel-generation
+  quota: 0
+default_model: qwen-plus
+public_base_url: https://sub2api.tengokukk.com/v1

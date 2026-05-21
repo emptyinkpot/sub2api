@@ -161,12 +161,29 @@
       "Mortis",
       "Telegram",
       "n8n",
-      "FuckVideo"
+      "FuckVideo",
+      "ContentMRS"
     ],
+    "consumerLanes": [
+      {
+        "id": "contentmrs-novel",
+        "consumer": "ContentMRS",
+        "groupName": "contentmrs-novel-qwen",
+        "platform": "openai",
+        "providerId": "dashscope",
+        "clientKeyName": "contentmrs-novel-generation",
+        "defaultModel": "qwen-plus",
+        "bootstrapScript": "deploy/ops/bootstrap-contentmrs.mjs",
+        "localSecretEnv": "~/.codex-secrets/contentmrs/sub2api-novel.env"
+      }
+    ],
+    "providerCatalogDoc": "docs/runtime/provider-catalog.md",
+    "providerCatalogAPI": "/api/v1/admin/provider-catalog",
     "principles": [
       "Consumers receive Sub2API-issued keys, not raw provider keys.",
       "Provider keys belong in Sub2API account credentials or deployment secret stores.",
-      "Groups define routing, quota, scheduling, and consumer isolation."
+      "Groups define routing, quota, scheduling, and consumer isolation.",
+      "API-key upstream vendors are configured via provider catalog presets (Qwen/Kimi/Zhipu/OpenAI/Coze proxy)."
     ]
   },
   "dnsPlan": {

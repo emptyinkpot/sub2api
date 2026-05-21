@@ -61,6 +61,10 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	clientStream := chatReq.Stream
 	includeUsage := chatReq.StreamOptions != nil && chatReq.StreamOptions.IncludeUsage
 
+	if shouldUseOpenAICompatibleChatPassthrough(account) {
+		return s.forwardOpenAIPassthrough(ctx, c, account, body, originalModel, nil, clientStream, startTime)
+	}
+
 	// 2. Resolve model mapping early so compat prompt_cache_key injection can
 	// derive a stable seed from the final upstream model family.
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)

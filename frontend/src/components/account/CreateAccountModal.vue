@@ -67,6 +67,16 @@
         <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
       </div>
 
+      <div>
+        <label class="input-label">{{ t('admin.accounts.providerPreset') }}</label>
+        <Select
+          v-model="selectedProviderPreset"
+          :options="providerPresetOptions"
+          @change="onProviderPresetChange"
+        />
+        <p class="input-hint">{{ t('admin.accounts.providerPresetHint') }}</p>
+      </div>
+
       <!-- Platform Selection - Segmented Control Style -->
       <div>
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
@@ -3167,6 +3177,7 @@ import { applyInterceptWarmup } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
+import { PROVIDER_CATALOG, getProviderPreset } from '@/constants/providerCatalog'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -3190,7 +3201,7 @@ interface OAuthFlowExposed {
   reset: () => void
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 const oauthStepTitle = computed(() => {
@@ -3289,6 +3300,27 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const selectedProviderPreset = ref('')
+const providerPresetOptions = computed(() => {
+  const manual = { value: '', label: t('admin.accounts.providerPresetManual') }
+  const presets = PROVIDER_CATALOG.map((p) => ({
+    value: p.id,
+    label: String(locale.value).startsWith('zh') ? p.display_name_zh : p.display_name,
+  }))
+  return [manual, ...presets]
+})
+function onProviderPresetChange(id: string) {
+  if (!id) return
+  const preset = getProviderPreset(id)
+  if (!preset) return
+  form.platform = preset.platform
+  accountCategory.value = 'apikey'
+  form.type = 'apikey'
+  apiKeyBaseUrl.value = preset.default_base_url
+  modelRestrictionMode.value = 'mapping'
+  modelMappings.value = Object.entries(preset.model_mapping).map(([from, to]) => ({ from, to }))
+  allowedModels.value = Object.keys(preset.model_mapping)
+}
 const editQuotaLimit = ref<number | null>(null)
 const editQuotaDailyLimit = ref<number | null>(null)
 const editQuotaWeeklyLimit = ref<number | null>(null)
