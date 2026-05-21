@@ -3373,10 +3373,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			if err != nil {
 				return nil, err
 			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
+			if isOpenAIChatCompletionsInboundPath(c) {
+				targetURL = buildOpenAICompatibleChatCompletionsURL(validatedURL)
+			} else {
+				targetURL = buildOpenAIResponsesURL(validatedURL)
+			}
 		}
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	if !isOpenAIChatCompletionsInboundPath(c) {
+		targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -5356,6 +5362,18 @@ func (s *OpenAIGatewayService) validateUpstreamBaseURL(raw string) (string, erro
 	return normalized, nil
 }
 
+// buildOpenAICompatibleChatCompletionsURL 组装 OpenAI-compatible /chat/completions 端点。
+func buildOpenAICompatibleChatCompletionsURL(base string) string {
+	normalized := strings.TrimRight(strings.TrimSpace(base), "/")
+	if strings.HasSuffix(normalized, "/chat/completions") {
+		return normalized
+	}
+	if strings.HasSuffix(normalized, "/v1") || strings.HasSuffix(normalized, "/v4") {
+		return normalized + "/chat/completions"
+	}
+	return normalized + "/v1/chat/completions"
+}
+
 // buildOpenAIResponsesURL 组装 OpenAI Responses 端点。
 // - base 以 /v1 结尾：追加 /responses
 // - base 以其他版本段结尾（如 /v4）：追加 /responses
@@ -5535,6 +5553,27 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 		}
 	}
 	return uuid.NewString()
+}
+
+func isOpenAIChatCompletionsInboundPath(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return strings.HasSuffix(strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/"), "/chat/completions")
+}
+
+func shouldUseOpenAICompatibleChatPassthrough(account *Account) bool {
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return false
+	}
+	if account.IsOpenAIPassthroughEnabled() {
+		return true
+	}
+	base := strings.ToLower(strings.TrimSpace(account.GetOpenAIBaseURL()))
+	if base == "" {
+		return false
+	}
+	return !strings.Contains(base, "api.openai.com")
 }
 
 func openAIResponsesRequestPathSuffix(c *gin.Context) string {

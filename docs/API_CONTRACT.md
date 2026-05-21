@@ -71,9 +71,21 @@ Create key payload shape:
 }
 ```
 
+## Admin Provider Catalog
+
+Canonical upstream vendor presets for API-key accounts (no secrets):
+
+```http
+GET /api/v1/admin/provider-catalog
+```
+
+See `docs/runtime/provider-catalog.md` and `backend/internal/domain/provider_catalog.go`.
+
 ## Admin Group Management
 
 Admin routes require admin authentication.
+
+Group `platform` values: `anthropic`, `openai`, `glm`, `coze`, `gemini`, `antigravity`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |

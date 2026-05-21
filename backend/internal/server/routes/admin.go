@@ -3,6 +3,7 @@ package routes
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	adminhandler "github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,9 @@ func RegisterAdminRoutes(
 
 		// 账号管理
 		registerAccountRoutes(admin, h)
+
+		// 上游厂商目录（API Key 预设，无密钥）
+		registerProviderCatalogRoutes(admin)
 
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
@@ -119,6 +123,11 @@ func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
 	}
+}
+
+func registerProviderCatalogRoutes(admin *gin.RouterGroup) {
+	catalog := adminhandler.NewProviderCatalogHandler()
+	admin.GET("/provider-catalog", catalog.List)
 }
 
 func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

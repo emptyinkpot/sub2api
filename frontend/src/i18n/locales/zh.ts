@@ -2175,6 +2175,7 @@ export default {
         all: '全部平台',
         anthropic: 'Anthropic',
         openai: 'OpenAI',
+        glm: '智谱 GLM',
         coze: 'Coze',
         gemini: 'Gemini',
         antigravity: 'Antigravity',
@@ -3109,6 +3110,9 @@ export default {
       notes: '备注',
       notesPlaceholder: '请输入备注',
       notesHint: '备注可选',
+      providerPreset: '上游厂商预设',
+      providerPresetHint: '选择后自动填充平台、Base URL 与模型映射（API Key 账号）',
+      providerPresetManual: '不套用预设，手动选择平台',
       // Filter options
       allPlatforms: '全部平台',
       allTypes: '全部类型',

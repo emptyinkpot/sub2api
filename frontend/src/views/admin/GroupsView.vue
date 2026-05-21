@@ -3134,20 +3134,22 @@ const exclusiveOptions = computed(() => [
 ]);
 
 const platformOptions = computed(() => [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "coze", label: "Coze" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
+  { value: "anthropic", label: t("admin.groups.platforms.anthropic") },
+  { value: "openai", label: t("admin.groups.platforms.openai") },
+  { value: "glm", label: t("admin.groups.platforms.glm") },
+  { value: "coze", label: t("admin.groups.platforms.coze") },
+  { value: "gemini", label: t("admin.groups.platforms.gemini") },
+  { value: "antigravity", label: t("admin.groups.platforms.antigravity") },
 ]);
 
 const platformFilterOptions = computed(() => [
   { value: "", label: t("admin.groups.allPlatforms") },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "coze", label: "Coze" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
+  { value: "anthropic", label: t("admin.groups.platforms.anthropic") },
+  { value: "openai", label: t("admin.groups.platforms.openai") },
+  { value: "glm", label: t("admin.groups.platforms.glm") },
+  { value: "coze", label: t("admin.groups.platforms.coze") },
+  { value: "gemini", label: t("admin.groups.platforms.gemini") },
+  { value: "antigravity", label: t("admin.groups.platforms.antigravity") },
 ]);
 
 const editStatusOptions = computed(() => [

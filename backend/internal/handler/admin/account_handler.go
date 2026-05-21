@@ -21,7 +21,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/coze"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/dashscope"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/moonshot"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/glm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -2022,6 +2024,58 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 					Object:      "model",
 					Type:        "model",
 					DisplayName: requestedModel,
+				})
+			}
+		}
+		response.Success(c, models)
+		return
+	}
+
+	baseURL := strings.ToLower(strings.TrimSpace(account.GetCredential("base_url")))
+	if strings.Contains(baseURL, "dashscope") {
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			response.Success(c, dashscope.DefaultModels)
+			return
+		}
+		var models []dashscope.Model
+		for requestedModel := range mapping {
+			var found bool
+			for _, dm := range dashscope.DefaultModels {
+				if dm.ID == requestedModel {
+					models = append(models, dm)
+					found = true
+					break
+				}
+			}
+			if !found {
+				models = append(models, dashscope.Model{
+					ID: requestedModel, Object: "model", OwnedBy: "dashscope", Type: "model", DisplayName: requestedModel,
+				})
+			}
+		}
+		response.Success(c, models)
+		return
+	}
+	if strings.Contains(baseURL, "moonshot") || strings.Contains(baseURL, "kimi") {
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			response.Success(c, moonshot.DefaultModels)
+			return
+		}
+		var models []moonshot.Model
+		for requestedModel := range mapping {
+			var found bool
+			for _, dm := range moonshot.DefaultModels {
+				if dm.ID == requestedModel {
+					models = append(models, dm)
+					found = true
+					break
+				}
+			}
+			if !found {
+				models = append(models, moonshot.Model{
+					ID: requestedModel, Object: "model", OwnedBy: "moonshot", Type: "model", DisplayName: requestedModel,
 				})
 			}
 		}
