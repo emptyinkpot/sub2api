@@ -5,7 +5,7 @@ cd /srv/sub2api
 git fetch origin main
 git merge --ff-only origin/main
 cd deploy
-docker build -f Dockerfile -t sub2api-contentmrs:local \
+docker build -f Dockerfile -t weishaw/sub2api:latest \
   --build-arg GOPROXY=https://goproxy.cn,direct \
   ..
 docker compose -f docker-compose.yml up -d --no-deps sub2api
