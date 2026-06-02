@@ -959,9 +959,14 @@ func (s *AntigravityGatewayService) applyErrorPolicy(p antigravityRetryLoopParam
 // mapAntigravityModel 获取映射后的模型名
 // 完全依赖映射配置：账户映射（通配符）→ 默认映射兜底（DefaultAntigravityModelMapping）
 // 注意：返回空字符串表示模型不被支持，调度时会过滤掉该账号
+// 当全局 DisableModelMapping=true 时直接透传 requestedModel，不查 mapping。
 func mapAntigravityModel(account *Account, requestedModel string) string {
 	if account == nil {
 		return ""
+	}
+
+	if globalDisableModelMapping {
+		return requestedModel
 	}
 
 	// 获取映射表（未配置时自动使用 DefaultAntigravityModelMapping）

@@ -37,10 +37,6 @@ vi.mock('@/api/admin', () => ({
   }
 }))
 
-vi.mock('@/api/admin/accounts', () => ({
-  getAntigravityDefaultModelMapping: vi.fn()
-}))
-
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -62,31 +58,6 @@ const BaseDialogStub = defineComponent({
     }
   },
   template: '<div v-if="show"><slot /><slot name="footer" /></div>'
-})
-
-const ModelWhitelistSelectorStub = defineComponent({
-  name: 'ModelWhitelistSelector',
-  props: {
-    modelValue: {
-      type: Array,
-      default: () => []
-    }
-  },
-  emits: ['update:modelValue'],
-  template: `
-    <div>
-      <button
-        type="button"
-        data-testid="rewrite-to-snapshot"
-        @click="$emit('update:modelValue', ['gpt-5.2-2025-12-11'])"
-      >
-        rewrite
-      </button>
-      <span data-testid="model-whitelist-value">
-        {{ Array.isArray(modelValue) ? modelValue.join(',') : '' }}
-      </span>
-    </div>
-  `
 })
 
 const SelectStub = defineComponent({
@@ -124,10 +95,7 @@ function buildAccount() {
     type: 'apikey',
     credentials: {
       api_key: 'sk-test',
-      base_url: 'https://api.openai.com',
-      model_mapping: {
-        'gpt-5.2': 'gpt-5.2'
-      }
+      base_url: 'https://api.openai.com'
     },
     extra: {},
     proxy_id: null,
@@ -155,41 +123,13 @@ function mountModal(account = buildAccount()) {
         Select: SelectStub,
         Icon: true,
         ProxySelector: true,
-        GroupSelector: true,
-        ModelWhitelistSelector: ModelWhitelistSelectorStub
+        GroupSelector: true
       }
     }
   })
 }
 
 describe('EditAccountModal', () => {
-  it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
-    const account = buildAccount()
-    updateAccountMock.mockReset()
-    checkMixedChannelRiskMock.mockReset()
-    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
-    updateAccountMock.mockResolvedValue(account)
-
-    const wrapper = mountModal(account)
-
-    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('gpt-5.2')
-
-    await wrapper.get('[data-testid="rewrite-to-snapshot"]').trigger('click')
-    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('gpt-5.2-2025-12-11')
-
-    await wrapper.setProps({ show: false })
-    await wrapper.setProps({ show: true })
-
-    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('gpt-5.2')
-
-    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
-
-    expect(updateAccountMock).toHaveBeenCalledTimes(1)
-    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
-      'gpt-5.2': 'gpt-5.2'
-    })
-  })
-
   it('submits OpenAI compact mode and compact-only model mapping', async () => {
     const account = buildAccount()
     account.extra = {

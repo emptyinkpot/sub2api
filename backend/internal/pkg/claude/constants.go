@@ -166,38 +166,19 @@ func DefaultModelIDs() []string {
 // DefaultTestModel 测试时使用的默认模型
 const DefaultTestModel = "claude-sonnet-4-5-20250929"
 
-// ModelIDOverrides Claude OAuth 请求需要的模型 ID 映射
-var ModelIDOverrides = map[string]string{
-	"claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
-	"claude-opus-4-5":   "claude-opus-4-5-20251101",
-	"claude-haiku-4-5":  "claude-haiku-4-5-20251001",
-}
+// ModelIDOverrides 已废弃——全局 DisableModelMapping 后不再做短ID→长ID改写。
+// 保留空 map 避免外部引用编译失败，清理后可删。
+var ModelIDOverrides = map[string]string{}
 
-// ModelIDReverseOverrides 用于将上游模型 ID 还原为短名
-var ModelIDReverseOverrides = map[string]string{
-	"claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
-	"claude-opus-4-5-20251101":   "claude-opus-4-5",
-	"claude-haiku-4-5-20251001":  "claude-haiku-4-5",
-}
+// ModelIDReverseOverrides 已废弃。
+var ModelIDReverseOverrides = map[string]string{}
 
-// NormalizeModelID 根据 Claude OAuth 规则映射模型
+// NormalizeModelID 已废弃——直接透传，不做映射。
 func NormalizeModelID(id string) string {
-	if id == "" {
-		return id
-	}
-	if mapped, ok := ModelIDOverrides[id]; ok {
-		return mapped
-	}
 	return id
 }
 
-// DenormalizeModelID 将上游模型 ID 转换为短名
+// DenormalizeModelID 已废弃——直接透传。
 func DenormalizeModelID(id string) string {
-	if id == "" {
-		return id
-	}
-	if mapped, ok := ModelIDReverseOverrides[id]; ok {
-		return mapped
-	}
 	return id
 }

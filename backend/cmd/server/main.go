@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/setup"
 	"github.com/Wei-Shaw/sub2api/internal/web"
 
@@ -138,6 +139,13 @@ func runMainServer() {
 	}
 	if cfg.RunMode == config.RunModeSimple {
 		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")
+	}
+
+	// Inject the global model-mapping disable flag for the service package.
+	// 见 internal/service/account.go:SetDisableModelMapping —— 关闭后 GetMappedModel/IsModelSupported 直接透传。
+	service.SetDisableModelMapping(cfg.Gateway.DisableModelMapping)
+	if cfg.Gateway.DisableModelMapping {
+		log.Println("⚙️  Model mapping/whitelist DISABLED globally (gateway.disable_model_mapping=true)")
 	}
 
 	buildInfo := handler.BuildInfo{

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import BulkEditAccountModal from '../BulkEditAccountModal.vue'
-import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
 import { adminAPI } from '@/api/admin'
 
 vi.mock('@/stores/app', () => ({
@@ -19,10 +18,6 @@ vi.mock('@/api/admin', () => ({
       checkMixedChannelRisk: vi.fn()
     }
   }
-}))
-
-vi.mock('@/api/admin/accounts', () => ({
-  getAntigravityDefaultModelMapping: vi.fn()
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -86,48 +81,6 @@ describe('BulkEditAccountModal', () => {
     vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockResolvedValue({
       has_risk: false
     } as any)
-  })
-
-  it('antigravity 白名单包含 Gemini 图片模型且过滤掉普通 GPT 模型', async () => {
-    const wrapper = mountModal()
-    const selector = wrapper.findComponent(ModelWhitelistSelector)
-    expect(selector.exists()).toBe(true)
-
-    await selector.find('div.cursor-pointer').trigger('click')
-
-    expect(wrapper.text()).toContain('gemini-3.1-flash-image')
-    expect(wrapper.text()).toContain('gemini-2.5-flash-image')
-    expect(wrapper.text()).not.toContain('gpt-5.3-codex')
-  })
-
-  it('antigravity 映射预设包含图片映射并过滤 OpenAI 预设', async () => {
-    const wrapper = mountModal()
-
-    const mappingTab = wrapper.findAll('button').find((btn) => btn.text().includes('admin.accounts.modelMapping'))
-    expect(mappingTab).toBeTruthy()
-    await mappingTab!.trigger('click')
-
-    expect(wrapper.text()).toContain('3.1-Flash-Image透传')
-    expect(wrapper.text()).toContain('3-Pro-Image→3.1')
-    expect(wrapper.text()).not.toContain('GPT-5.3 Codex Spark')
-  })
-
-  it('仅勾选模型限制且白名单留空时，应提交空 model_mapping 以支持所有模型', async () => {
-    const wrapper = mountModal({
-      selectedPlatforms: ['anthropic'],
-      selectedTypes: ['apikey']
-    })
-
-    await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
-    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
-      credentials: {
-        model_mapping: {}
-      }
-    })
   })
 
   it('OpenAI 账号批量编辑可开启自动透传', async () => {
@@ -234,27 +187,6 @@ describe('BulkEditAccountModal', () => {
         openai_oauth_passthrough: false
       }
     })
-  })
-
-  it('开启 OpenAI 自动透传时不再同时提交模型限制', async () => {
-    const wrapper = mountModal({
-      selectedPlatforms: ['openai'],
-      selectedTypes: ['oauth']
-    })
-
-    await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
-    await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
-    await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
-    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
-      extra: {
-        openai_passthrough: true
-      }
-    })
-    expect(wrapper.text()).toContain('admin.accounts.openai.modelRestrictionDisabledByPassthrough')
   })
 
   it('filtered-results 模式下应提交 filters 而不是 account_ids', async () => {

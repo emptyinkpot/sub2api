@@ -16,6 +16,13 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
+// globalDisableModelMapping 全局关闭模型映射改写。
+// true 时 GetMappedModel/ResolveMappedModel 直接透传原始模型名，不查 mapping。
+var globalDisableModelMapping bool
+
+// SetDisableModelMapping 由启动入口调用一次，注入 cfg.Gateway.DisableModelMapping。
+func SetDisableModelMapping(v bool) { globalDisableModelMapping = v }
+
 type Account struct {
 	ID          int64
 	Name        string
@@ -610,7 +617,11 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
 
 // IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）
 // 如果未配置 mapping，返回 true（允许所有模型）
+// 全局开关 globalDisableModelMapping=true 时直接放行所有模型。
 func (a *Account) IsModelSupported(requestedModel string) bool {
+	if globalDisableModelMapping {
+		return true
+	}
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
 		return true // 无映射 = 允许所有
@@ -631,7 +642,11 @@ func (a *Account) GetMappedModel(requestedModel string) string {
 
 // ResolveMappedModel 获取映射后的模型名，并返回是否命中了账号级映射。
 // matched=true 表示命中了精确映射或通配符映射，即使映射结果与原模型名相同。
+// 全局开关 globalDisableModelMapping=true 时直接透传：不查 mapping，原模型名原样返回，matched=false。
 func (a *Account) ResolveMappedModel(requestedModel string) (mappedModel string, matched bool) {
+	if globalDisableModelMapping {
+		return requestedModel, false
+	}
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
 		return requestedModel, false
