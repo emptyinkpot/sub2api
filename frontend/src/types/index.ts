@@ -1012,6 +1012,77 @@ export interface CheckMixedChannelResponse {
   details?: MixedChannelWarningDetails
 }
 
+export interface ProxyAssignmentFilters {
+  platform?: string
+  type?: string
+  status?: string
+  group?: string
+  search?: string
+  privacy_mode?: string
+}
+
+export interface ProxyAssignmentInput {
+  account_ids?: number[]
+  filters?: ProxyAssignmentFilters | null
+  plan_id?: string
+  only_unbound?: boolean
+  preserve_existing_binding?: boolean
+  require_exit_ip?: boolean
+  min_quality_score?: number
+  max_accounts_per_exit_ip?: number
+}
+
+export interface ProxyAssignmentSummary {
+  keep: number
+  assign: number
+  rebalance: number
+  skip: number
+  no_available_proxy: number
+  exit_ip_over_limit: number
+}
+
+export interface ProxyAssignmentItem {
+  account_id: number
+  account_name: string
+  platform: string
+  type: string
+  old_proxy_id?: number | null
+  old_proxy_name?: string
+  old_exit_ip?: string
+  new_proxy_id?: number | null
+  new_proxy_name?: string
+  new_exit_ip?: string
+  action: string
+  reason: string
+  warnings?: string[]
+  max_accounts_per_exit_ip: number
+}
+
+export interface ProxyAssignmentPlan {
+  plan_id: string
+  generated_at: number
+  account_count: number
+  change_count: number
+  items: ProxyAssignmentItem[]
+  summary: ProxyAssignmentSummary
+}
+
+export interface ProxyAssignmentApplyItem {
+  account_id: number
+  success: boolean
+  action: string
+  error?: string
+}
+
+export interface ProxyAssignmentApplyResult {
+  plan: ProxyAssignmentPlan | null
+  success: number
+  failed: number
+  success_ids: number[]
+  failed_ids: number[]
+  results: ProxyAssignmentApplyItem[]
+}
+
 export interface CreateProxyRequest {
   name: string
   protocol: ProxyProtocol

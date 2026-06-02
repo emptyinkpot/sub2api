@@ -203,11 +203,11 @@ async function main() {
   const { groupId, accountId } = await ensureNovelGroup(token, providerKey);
   const { key, keyId, reused } = await createNovelClientKey(token, groupId);
 
-  const outDir = path.join(os.homedir(), '.codex-secrets', 'contentmrs');
+  const outDir = path.join(os.homedir(), '.codex-secrets', 'sub2api', 'consumers');
   fs.mkdirSync(outDir, { recursive: true });
-  const envPath = path.join(outDir, 'sub2api-novel.env');
+  const envPath = path.join(outDir, 'contentmrs-novel.env');
   const lines = [
-    '# ContentMRS novel generation — sub2api client key (do not use Codex auth.json)',
+    '# ContentMRS consumer on public sub2api (170) — not part of ContentMRS runtime',
     `SUB2API_NOVEL_API_KEY=${key}`,
     `SUB2API_NOVEL_BASE_URL=https://sub2api.tengokukk.com/v1`,
     `CONTENTBASE_DEFAULT_MODEL=${defaultModel}`,

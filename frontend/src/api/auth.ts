@@ -74,6 +74,26 @@ export function getTokenExpiresAt(): number | null {
 }
 
 /**
+ * Bootstrap an authenticated session for reverse-proxy protected deployments.
+ * This is intended for single-user access paths that should open directly into
+ * the application without a manual login form.
+ */
+export async function bootstrapLogin(): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/auth/bootstrap')
+
+  setAuthToken(data.access_token)
+  if (data.refresh_token) {
+    setRefreshToken(data.refresh_token)
+  }
+  if (data.expires_in) {
+    setTokenExpiresAt(data.expires_in)
+  }
+  localStorage.setItem('auth_user', JSON.stringify(data.user))
+
+  return data
+}
+
+/**
  * Clear authentication token from localStorage
  */
 export function clearAuthToken(): void {

@@ -3167,7 +3167,7 @@ import type {
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Select from '@/components/common/Select.vue'
+import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
@@ -3309,7 +3309,8 @@ const providerPresetOptions = computed(() => {
   }))
   return [manual, ...presets]
 })
-function onProviderPresetChange(id: string) {
+function onProviderPresetChange(id: string | number | boolean | null, _option?: SelectOption | null) {
+  if (typeof id !== 'string') return
   if (!id) return
   const preset = getProviderPreset(id)
   if (!preset) return

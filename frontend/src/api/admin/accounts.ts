@@ -17,7 +17,10 @@ import type {
   AdminDataPayload,
   AdminDataImportResult,
   CheckMixedChannelRequest,
-  CheckMixedChannelResponse
+  CheckMixedChannelResponse,
+  ProxyAssignmentInput,
+  ProxyAssignmentPlan,
+  ProxyAssignmentApplyResult
 } from '@/types'
 
 /**
@@ -130,6 +133,16 @@ export async function getById(id: number): Promise<Account> {
  */
 export async function create(accountData: CreateAccountRequest): Promise<Account> {
   const { data } = await apiClient.post<Account>('/admin/accounts', accountData)
+  return data
+}
+
+/**
+ * Clone an existing account.
+ * @param id - Source account ID
+ * @returns Created copied account
+ */
+export async function clone(id: number): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/clone`)
   return data
 }
 
@@ -395,6 +408,26 @@ export async function bulkUpdate(
   return data
 }
 
+export async function previewProxyAssignment(
+  payload: ProxyAssignmentInput
+): Promise<ProxyAssignmentPlan> {
+  const { data } = await apiClient.post<ProxyAssignmentPlan>(
+    '/admin/accounts/proxy-assignment/preview',
+    payload
+  )
+  return data
+}
+
+export async function applyProxyAssignment(
+  payload: ProxyAssignmentInput
+): Promise<ProxyAssignmentApplyResult> {
+  const { data } = await apiClient.post<ProxyAssignmentApplyResult>(
+    '/admin/accounts/proxy-assignment/apply',
+    payload
+  )
+  return data
+}
+
 /**
  * Get account today statistics
  * @param id - Account ID
@@ -635,6 +668,7 @@ export const accountsAPI = {
   listWithEtag,
   getById,
   create,
+  clone,
   update,
   checkMixedChannelRisk,
   delete: deleteAccount,
@@ -659,6 +693,8 @@ export const accountsAPI = {
   batchCreate,
   batchUpdateCredentials,
   bulkUpdate,
+  previewProxyAssignment,
+  applyProxyAssignment,
   previewFromCrs,
   syncFromCrs,
   exportData,
