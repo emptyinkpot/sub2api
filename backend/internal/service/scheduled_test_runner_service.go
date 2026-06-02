@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -135,6 +136,11 @@ func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *Sched
 		s.tryRecoverAccount(ctx, plan.AccountID, plan.ID)
 	}
 
+	// Auto-disable account after consecutive failures if auto_disable is enabled.
+	if result.Status == "failed" && plan.AutoDisable {
+		s.tryDisableAccount(ctx, plan)
+	}
+
 	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d computeNextRun error: %v", plan.ID, err)
@@ -166,5 +172,40 @@ func (s *ScheduledTestRunnerService) tryRecoverAccount(ctx context.Context, acco
 	}
 	if recovery.ClearedRateLimit {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-recover: account=%d cleared rate-limit/runtime state", planID, accountID)
+	}
+}
+
+const scheduledTestAutoDisableThreshold = 2
+
+// tryDisableAccount sets the account to error status after consecutive failures.
+// The current failed result is already persisted by SaveResult, so the latest N
+// results (newest-first) must all be "failed" to trip auto-disable.
+func (s *ScheduledTestRunnerService) tryDisableAccount(ctx context.Context, plan *ScheduledTestPlan) {
+	if s.rateLimitSvc == nil {
+		return
+	}
+
+	results, err := s.scheduledSvc.ListResults(ctx, plan.ID, scheduledTestAutoDisableThreshold)
+	if err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-disable list results failed: %v", plan.ID, err)
+		return
+	}
+	if len(results) < scheduledTestAutoDisableThreshold {
+		return // not enough history yet
+	}
+	for _, r := range results {
+		if r.Status != "failed" {
+			return // a recent pass breaks the streak
+		}
+	}
+
+	reason := fmt.Sprintf("auto-disabled: %d consecutive scheduled-test failures", scheduledTestAutoDisableThreshold)
+	disabled, err := s.rateLimitSvc.DisableAccountAfterFailedTest(ctx, plan.AccountID, reason)
+	if err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-disable failed: %v", plan.ID, err)
+		return
+	}
+	if disabled {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-disable: account=%d set to error after %d consecutive failures", plan.ID, plan.AccountID, scheduledTestAutoDisableThreshold)
 	}
 }

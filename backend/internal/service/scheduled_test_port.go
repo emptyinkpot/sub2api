@@ -14,6 +14,7 @@ type ScheduledTestPlan struct {
 	Enabled        bool       `json:"enabled"`
 	MaxResults     int        `json:"max_results"`
 	AutoRecover    bool       `json:"auto_recover"`
+	AutoDisable    bool       `json:"auto_disable"`
 	LastRunAt      *time.Time `json:"last_run_at"`
 	NextRunAt      *time.Time `json:"next_run_at"`
 	CreatedAt      time.Time  `json:"created_at"`

@@ -26,6 +26,7 @@ type createScheduledTestPlanRequest struct {
 	Enabled        *bool  `json:"enabled"`
 	MaxResults     int    `json:"max_results"`
 	AutoRecover    *bool  `json:"auto_recover"`
+	AutoDisable    *bool  `json:"auto_disable"`
 }
 
 type updateScheduledTestPlanRequest struct {
@@ -34,6 +35,7 @@ type updateScheduledTestPlanRequest struct {
 	Enabled        *bool  `json:"enabled"`
 	MaxResults     int    `json:"max_results"`
 	AutoRecover    *bool  `json:"auto_recover"`
+	AutoDisable    *bool  `json:"auto_disable"`
 }
 
 // ListByAccount GET /admin/accounts/:id/scheduled-test-plans
@@ -72,6 +74,9 @@ func (h *ScheduledTestHandler) Create(c *gin.Context) {
 	}
 	if req.AutoRecover != nil {
 		plan.AutoRecover = *req.AutoRecover
+	}
+	if req.AutoDisable != nil {
+		plan.AutoDisable = *req.AutoDisable
 	}
 
 	created, err := h.scheduledTestSvc.CreatePlan(c.Request.Context(), plan)
@@ -116,6 +121,9 @@ func (h *ScheduledTestHandler) Update(c *gin.Context) {
 	}
 	if req.AutoRecover != nil {
 		existing.AutoRecover = *req.AutoRecover
+	}
+	if req.AutoDisable != nil {
+		existing.AutoDisable = *req.AutoDisable
 	}
 
 	updated, err := h.scheduledTestSvc.UpdatePlan(c.Request.Context(), existing)

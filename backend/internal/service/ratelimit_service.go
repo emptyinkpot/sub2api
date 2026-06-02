@@ -1370,6 +1370,23 @@ func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context
 	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{})
 }
 
+// DisableAccountAfterFailedTest 在连续测试失败后将账号置为 error 状态（自动下线）。
+// 复用 handleAuthError 的 SetError 通道；若账号已是 error 则跳过（幂等，避免重复 outbox 事件）。
+// 返回是否实际触发了下线。后续一次成功测试会经 RecoverAccountState 自动清 error 拉回。
+func (s *RateLimitService) DisableAccountAfterFailedTest(ctx context.Context, accountID int64, reason string) (bool, error) {
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	if account.Status == StatusError {
+		return false, nil // 已下线，no-op
+	}
+	if err := s.accountRepo.SetError(ctx, accountID, reason); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID int64) error {
 	if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
 		return err
