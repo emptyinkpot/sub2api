@@ -37,6 +37,7 @@ func newGatewayRoutesTestRouter() *gin.Engine {
 		nil,
 		nil,
 		&config.Config{},
+		nil,
 	)
 
 	return router
