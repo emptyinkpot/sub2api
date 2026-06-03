@@ -335,6 +335,7 @@ type OpenAIGatewayService struct {
 	channelService        *ChannelService
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
+	accountProbeService   *AccountProbeService
 
 	openaiWSPoolOnce              sync.Once
 	openaiWSStateStoreOnce        sync.Once
@@ -374,6 +375,7 @@ func NewOpenAIGatewayService(
 	channelService *ChannelService,
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
+	accountProbeService *AccountProbeService,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
@@ -405,6 +407,7 @@ func NewOpenAIGatewayService(
 		channelService:        channelService,
 		balanceNotifyService:  balanceNotifyService,
 		settingService:        settingService,
+		accountProbeService:   accountProbeService,
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 	}
@@ -2900,6 +2903,15 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
+		// Runtime self-heal: 403 with TLS-like body triggers async probe
+		if resp.StatusCode == 403 && !account.IsTLSFingerprintEnabled() && s.accountProbeService != nil {
+			peek, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			peekLower := strings.ToLower(string(peek))
+			if strings.Contains(peekLower, "tls") || strings.Contains(peekLower, "cloudflare") || strings.Contains(peekLower, "just a moment") {
+				go s.accountProbeService.ProbeAccountCapabilities(context.Background(), account)
+			}
+			resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(peek), resp.Body))
+		}
 		// 透传模式默认保持原样代理；但 429/529 属于网关必须兜底的
 		// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
 		if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {

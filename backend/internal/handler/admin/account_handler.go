@@ -535,6 +535,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	// 确定是否跳过混合渠道检查
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
 
+	var createdAccount *service.Account
 	result, err := executeAdminIdempotent(c, "admin.accounts.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		account, execErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
 			Name:                  req.Name,
@@ -560,6 +561,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		h.adminService.ForceAntigravityPrivacy(ctx, account)
 		// OpenAI OAuth: 新账号直接设置隐私
 		h.adminService.ForceOpenAIPrivacy(ctx, account)
+		createdAccount = account
 		return h.buildAccountResponseWithRuntime(ctx, account), nil
 	})
 	if err != nil {
@@ -584,6 +586,25 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	if result != nil && result.Replayed {
 		c.Header("X-Idempotency-Replayed", "true")
 	}
+
+	// 异步探测：仅对 OpenAI apikey 类型且有 base_url 的账号触发能力检测
+	if createdAccount != nil && !(result != nil && result.Replayed) &&
+		createdAccount.Type == service.AccountTypeAPIKey &&
+		createdAccount.IsOpenAI() &&
+		createdAccount.GetOpenAIBaseURL() != "" {
+		probeAccount := createdAccount
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("create_account_probe_panic", "account_id", probeAccount.ID, "recover", r)
+				}
+			}()
+			if _, err := h.accountProbeService.ProbeAccountCapabilities(context.Background(), probeAccount); err != nil {
+				slog.Warn("create_account_probe_failed", "account_id", probeAccount.ID, "error", err)
+			}
+		}()
+	}
+
 	response.Success(c, result.Data)
 }
 
