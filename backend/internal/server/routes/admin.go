@@ -187,6 +187,9 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		// Request drilldown (success + error)
 		ops.GET("/requests", h.Admin.Ops.ListRequestDetails)
 
+		// Full request traces (success + error, async collected)
+		ops.GET("/request-traces", h.Admin.RequestTrace.ListRequestTraces)
+
 		// Indexed system logs
 		ops.GET("/system-logs", h.Admin.Ops.ListSystemLogs)
 		ops.POST("/system-logs/cleanup", h.Admin.Ops.CleanupSystemLogs)

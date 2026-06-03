@@ -511,12 +511,21 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorRequestTemplateService,
+	ProvideRequestTraceService,
 )
 
 // ProvidePaymentConfigService wraps NewPaymentConfigService to accept the named
 // payment.EncryptionKey type instead of raw []byte, avoiding Wire ambiguity.
 func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey) *PaymentConfigService {
 	return NewPaymentConfigService(entClient, settingRepo, []byte(key))
+}
+
+// ProvideRequestTraceService creates and starts the request trace service.
+// It runs an async batch writer goroutine that flushes to Postgres on a 1s tick or 100-row batch.
+func ProvideRequestTraceService(repo RequestTraceRepository, redisClient *redis.Client) *RequestTraceService {
+	svc := NewRequestTraceService(repo, redisClient)
+	svc.Start()
+	return svc
 }
 
 // ProvideBalanceNotifyService creates BalanceNotifyService
