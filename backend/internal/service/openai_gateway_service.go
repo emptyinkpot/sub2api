@@ -2870,7 +2870,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	var resp *http.Response
+	if account.IsTLSFingerprintEnabled() {
+		resp, err = s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, nil)
+	} else {
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	}
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -5006,6 +5011,9 @@ func shouldUseOpenAICompatibleChatPassthrough(account *Account) bool {
 	}
 	if account.IsOpenAIPassthroughEnabled() {
 		return true
+	}
+	if account.IsOpenAIPassthroughDisabled() {
+		return false
 	}
 	base := strings.ToLower(strings.TrimSpace(account.GetOpenAIBaseURL()))
 	if base == "" {

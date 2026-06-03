@@ -1160,6 +1160,19 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
 	return false
 }
 
+// IsOpenAIPassthroughDisabled 返回 OpenAI 账号是否显式禁用了 chat passthrough。
+// 当 extra.openai_passthrough 显式设置为 false 时返回 true。
+// 用于让 wire_api=responses 类型的第三方中转不走 chat completions 透传。
+func (a *Account) IsOpenAIPassthroughDisabled() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	if val, ok := a.Extra["openai_passthrough"].(bool); ok && !val {
+		return true
+	}
+	return false
+}
+
 // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
 //
 // 分类型新字段：
@@ -1410,17 +1423,16 @@ func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 // 仅适用于 Anthropic OAuth/SetupToken 类型账号
 // 启用后将模拟 Claude Code (Node.js) 客户端的 TLS 握手特征
 func (a *Account) IsTLSFingerprintEnabled() bool {
-	// 仅支持 Anthropic OAuth/SetupToken 账号
-	if !a.IsAnthropicOAuthOrSetupToken() {
-		return false
-	}
-	if a.Extra == nil {
+	if a == nil || a.Extra == nil {
 		return false
 	}
 	if v, ok := a.Extra["enable_tls_fingerprint"]; ok {
 		if enabled, ok := v.(bool); ok {
 			return enabled
 		}
+	}
+	if a.GetTLSFingerprintProfileID() > 0 {
+		return true
 	}
 	return false
 }
