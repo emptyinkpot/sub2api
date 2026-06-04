@@ -1593,6 +1593,19 @@ func (h *OpenAIGatewayHandler) ensureResponsesDependencies(c *gin.Context, reqLo
 	return false
 }
 
+type OpenAIDependenciesStatus struct {
+	OK      bool     `json:"ok"`
+	Missing []string `json:"missing"`
+}
+
+func (h *OpenAIGatewayHandler) ResponsesDependenciesStatus() OpenAIDependenciesStatus {
+	missing := h.missingResponsesDependencies()
+	if len(missing) == 0 {
+		return OpenAIDependenciesStatus{OK: true, Missing: []string{}}
+	}
+	return OpenAIDependenciesStatus{OK: false, Missing: missing}
+}
+
 func (h *OpenAIGatewayHandler) missingResponsesDependencies() []string {
 	missing := make([]string, 0, 5)
 	if h == nil {
