@@ -277,6 +277,9 @@ type Login2FARequest struct {
 	TotpCode  string `json:"totp_code" binding:"required,len=6"`
 }
 
+// BootstrapLoginResponse is returned by the auto-login bootstrap endpoint.
+type BootstrapLoginResponse = AuthResponse
+
 // Login2FA completes the login with 2FA verification
 // POST /api/v1/auth/login/2fa
 func (h *AuthHandler) Login2FA(c *gin.Context) {
@@ -398,6 +401,24 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 	}
 
 	h.respondWithTokenPair(c, user)
+}
+
+// BootstrapLogin handles single-user bootstrap access for a reverse-proxy
+// protected deployment. It returns a normal token pair for the first admin user.
+// POST /api/v1/auth/bootstrap
+func (h *AuthHandler) BootstrapLogin(c *gin.Context) {
+	admin, err := h.userService.GetFirstAdmin(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	if err := ensureLoginUserActive(admin); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	h.respondWithTokenPair(c, admin)
 }
 
 // GetCurrentUser handles getting current authenticated user

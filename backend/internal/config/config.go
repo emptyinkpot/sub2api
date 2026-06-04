@@ -68,6 +68,7 @@ type Config struct {
 	Database                DatabaseConfig                `mapstructure:"database"`
 	Redis                   RedisConfig                   `mapstructure:"redis"`
 	Ops                     OpsConfig                     `mapstructure:"ops"`
+	Auth                    AuthConfig                    `mapstructure:"auth"`
 	JWT                     JWTConfig                     `mapstructure:"jwt"`
 	Totp                    TotpConfig                    `mapstructure:"totp"`
 	LinuxDo                 LinuxDoConnectConfig          `mapstructure:"linuxdo_connect"`
@@ -1208,6 +1209,12 @@ type OpsMetricsCollectorCacheConfig struct {
 	TTL     time.Duration `mapstructure:"ttl"`
 }
 
+type AuthConfig struct {
+	// PasswordVerificationEnabled controls whether email/password login checks the stored password hash.
+	// It defaults to false for private deployments that rely on external access control or bootstrap recovery.
+	PasswordVerificationEnabled bool `mapstructure:"password_verification_enabled"`
+}
+
 type JWTConfig struct {
 	Secret     string `mapstructure:"secret"`
 	ExpireHour int    `mapstructure:"expire_hour"`
@@ -1591,6 +1598,9 @@ func setDefaults() {
 
 	// Turnstile
 	viper.SetDefault("turnstile.required", false)
+
+	// Auth
+	viper.SetDefault("auth.password_verification_enabled", false)
 
 	// LinuxDo Connect OAuth 登录
 	viper.SetDefault("linuxdo_connect.enabled", false)

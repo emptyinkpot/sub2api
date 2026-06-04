@@ -450,7 +450,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// 验证密码
-	if !s.CheckPassword(password, user.PasswordHash) {
+	if s.shouldVerifyPassword() && !s.CheckPassword(password, user.PasswordHash) {
 		return "", nil, ErrInvalidCredentials
 	}
 
@@ -466,6 +466,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	return token, user, nil
+}
+
+func (s *AuthService) shouldVerifyPassword() bool {
+	return s != nil && s.cfg != nil && s.cfg.Auth.PasswordVerificationEnabled
 }
 
 // LoginOrRegisterOAuth 用于第三方 OAuth/SSO 登录：
