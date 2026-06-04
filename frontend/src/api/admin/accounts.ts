@@ -288,6 +288,31 @@ export async function recoverState(id: number): Promise<Account> {
   return data
 }
 
+export async function clone(id: number): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/clone`)
+  return data
+}
+
+export async function previewProxyAssignment(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.post<Record<string, unknown>>(
+    '/admin/accounts/proxy-assignment/preview',
+    payload
+  )
+  return data
+}
+
+export async function applyProxyAssignment(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.post<Record<string, unknown>>(
+    '/admin/accounts/proxy-assignment/apply',
+    payload
+  )
+  return data
+}
+
 /**
  * Reset account quota usage
  * @param id - Account ID
@@ -714,6 +739,9 @@ export const accountsAPI = {
   getBatchTodayStats,
   clearRateLimit,
   recoverState,
+  clone,
+  previewProxyAssignment,
+  applyProxyAssignment,
   resetAccountQuota,
   getTempUnschedulableStatus,
   resetTempUnschedulable,
