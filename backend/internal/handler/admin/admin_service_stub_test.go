@@ -635,3 +635,15 @@ var _ service.AdminService = (*stubAdminService)(nil)
 func (s *stubAdminService) GetProxyRiskSummary(_ context.Context) (*service.ProxyRiskSummary, error) {
 	return nil, nil
 }
+
+func (s *stubAdminService) CloneAccount(_ context.Context, _ int64) (*service.Account, error) {
+	return nil, nil
+}
+
+func (s *stubAdminService) PreviewProxyAssignment(_ context.Context, _ *service.ProxyAssignmentInput) (*service.ProxyAssignmentPlan, error) {
+	return nil, nil
+}
+
+func (s *stubAdminService) ApplyProxyAssignment(_ context.Context, _ *service.ProxyAssignmentInput) (*service.ProxyAssignmentApplyResult, error) {
+	return nil, nil
+}

@@ -113,6 +113,9 @@ type AdminService interface {
 	TestProxy(ctx context.Context, id int64) (*ProxyTestResult, error)
 	CheckProxyQuality(ctx context.Context, id int64) (*ProxyQualityCheckResult, error)
 	GetProxyRiskSummary(ctx context.Context) (*ProxyRiskSummary, error)
+	CloneAccount(ctx context.Context, id int64) (*Account, error)
+	PreviewProxyAssignment(ctx context.Context, input *ProxyAssignmentInput) (*ProxyAssignmentPlan, error)
+	ApplyProxyAssignment(ctx context.Context, input *ProxyAssignmentInput) (*ProxyAssignmentApplyResult, error)
 
 	// Redeem code management
 	ListRedeemCodes(ctx context.Context, page, pageSize int, codeType, status, search string, sortBy, sortOrder string) ([]RedeemCode, int64, error)
