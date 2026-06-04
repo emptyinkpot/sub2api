@@ -3430,7 +3430,8 @@ const providerPresetOptions = computed(() => {
   }))
   return [manual, ...presets]
 })
-function onProviderPresetChange(id: string) {
+function onProviderPresetChange(value: string | number | boolean | null) {
+  const id = typeof value === 'string' ? value : ''
   if (!id) return
   const preset = getProviderPreset(id)
   if (!preset) return

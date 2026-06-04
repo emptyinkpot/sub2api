@@ -630,3 +630,8 @@ func (s *stubAdminService) ReplaceUserGroup(ctx context.Context, userID, oldGrou
 
 // Ensure stub implements interface.
 var _ service.AdminService = (*stubAdminService)(nil)
+
+
+func (s *stubAdminService) GetProxyRiskSummary(_ context.Context) (*service.ProxyRiskSummary, error) {
+	return nil, nil
+}
