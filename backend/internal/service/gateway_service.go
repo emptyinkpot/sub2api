@@ -8833,6 +8833,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	subscription := input.Subscription
 	ApplyForwardImageBillingResolution(result)
 
+	// Anthropic 成功响应：清零连续 403 计数（与 OpenAIGatewayService.RecordUsage 对称）。
+	// 这是 handleAnthropic403 "连续 N 次"语义的命门——成功即中断连续，
+	// 使偶发(不连续)的 origin 403 不会在窗口内累计而误触永久禁号。
+	if s.rateLimitService != nil && account != nil && account.Platform == PlatformAnthropic {
+		s.rateLimitService.ResetAnthropic403Counter(ctx, account.ID)
+	}
+
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens
 	// 用于粘性会话切换时的特殊计费处理
 	if input.ForceCacheBilling && result.Usage.InputTokens > 0 {

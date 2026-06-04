@@ -19,18 +19,19 @@ import (
 
 // RateLimitService 处理限流和过载状态管理
 type RateLimitService struct {
-	accountRepo           AccountRepository
-	usageRepo             UsageLogRepository
-	cfg                   *config.Config
-	geminiQuotaService    *GeminiQuotaService
-	tempUnschedCache      TempUnschedCache
-	timeoutCounterCache   TimeoutCounterCache
-	openAI403CounterCache OpenAI403CounterCache
-	settingService        *SettingService
-	tokenCacheInvalidator TokenCacheInvalidator
-	runtimeBlocker        AccountRuntimeBlocker
-	usageCacheMu          sync.RWMutex
-	usageCache            map[int64]*geminiUsageCacheEntry
+	accountRepo              AccountRepository
+	usageRepo                UsageLogRepository
+	cfg                      *config.Config
+	geminiQuotaService       *GeminiQuotaService
+	tempUnschedCache         TempUnschedCache
+	timeoutCounterCache      TimeoutCounterCache
+	openAI403CounterCache    OpenAI403CounterCache
+	anthropic403CounterCache Anthropic403CounterCache
+	settingService           *SettingService
+	tokenCacheInvalidator    TokenCacheInvalidator
+	runtimeBlocker           AccountRuntimeBlocker
+	usageCacheMu             sync.RWMutex
+	usageCache               map[int64]*geminiUsageCacheEntry
 }
 
 type AccountRuntimeBlocker interface {
@@ -72,6 +73,12 @@ const (
 	openAI403CounterWindowMinutes   = 180
 )
 
+const (
+	anthropic403CooldownMinutesDefault = 10
+	anthropic403DisableThreshold       = 3
+	anthropic403CounterWindowMinutes   = 180
+)
+
 // NewRateLimitService 创建RateLimitService实例
 func NewRateLimitService(accountRepo AccountRepository, usageRepo UsageLogRepository, cfg *config.Config, geminiQuotaService *GeminiQuotaService, tempUnschedCache TempUnschedCache) *RateLimitService {
 	return &RateLimitService{
@@ -92,6 +99,11 @@ func (s *RateLimitService) SetTimeoutCounterCache(cache TimeoutCounterCache) {
 // SetOpenAI403CounterCache 设置 OpenAI 403 连续失败计数器（可选依赖）
 func (s *RateLimitService) SetOpenAI403CounterCache(cache OpenAI403CounterCache) {
 	s.openAI403CounterCache = cache
+}
+
+// SetAnthropic403CounterCache 设置 Anthropic 403 连续失败计数器（可选依赖）
+func (s *RateLimitService) SetAnthropic403CounterCache(cache Anthropic403CounterCache) {
+	s.anthropic403CounterCache = cache
 }
 
 // SetSettingService 设置系统设置服务（可选依赖）
@@ -747,7 +759,10 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 	if account.Platform == PlatformOpenAI {
 		return s.handleOpenAI403(ctx, account, upstreamMsg, responseBody)
 	}
-	// 非 Antigravity 平台：保持原有行为
+	if account.Platform == PlatformAnthropic {
+		return s.handleAnthropic403(ctx, account, upstreamMsg, responseBody)
+	}
+	// 非 Antigravity/OpenAI/Anthropic 平台：保持原有行为
 	msg := buildForbiddenErrorMessage(
 		"Access forbidden (403):",
 		upstreamMsg,
@@ -799,6 +814,54 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 		"until", until,
 		"count", count,
 		"threshold", openAI403DisableThreshold,
+	)
+	return true
+}
+
+// handleAnthropic403 处理 Anthropic 平台的 403 错误。
+// 与 handleOpenAI403 同构：滑动窗口内连续 403 才永久禁号，
+// 未达阈值只临时冷却（自动恢复），避免上游 origin 偶发瞬态 403 把唯一活号永久踢出。
+// 真·CF 指纹拦（HTML 挑战页，非连续）会在窗口内累计触发，但成功请求会清零计数（见 recordUsageCore）。
+func (s *RateLimitService) handleAnthropic403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	msg := buildForbiddenErrorMessage(
+		"Access forbidden (403):",
+		upstreamMsg,
+		responseBody,
+		"account may be suspended or lack permissions",
+	)
+
+	if s.anthropic403CounterCache == nil {
+		s.handleAuthError(ctx, account, msg)
+		return true
+	}
+
+	count, err := s.anthropic403CounterCache.IncrementAnthropic403Count(ctx, account.ID, anthropic403CounterWindowMinutes)
+	if err != nil {
+		slog.Warn("anthropic_403_increment_failed", "account_id", account.ID, "error", err)
+		s.handleAuthError(ctx, account, msg)
+		return true
+	}
+
+	if count >= anthropic403DisableThreshold {
+		msg = fmt.Sprintf("%s | consecutive_403=%d/%d", msg, count, anthropic403DisableThreshold)
+		s.handleAuthError(ctx, account, msg)
+		return true
+	}
+
+	until := time.Now().Add(time.Duration(anthropic403CooldownMinutesDefault) * time.Minute)
+	reason := fmt.Sprintf("Anthropic 403 temporary cooldown (%d/%d): %s", count, anthropic403DisableThreshold, msg)
+	if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, reason); err != nil {
+		slog.Warn("anthropic_403_set_temp_unschedulable_failed", "account_id", account.ID, "error", err)
+		s.handleAuthError(ctx, account, msg)
+		return true
+	}
+
+	slog.Warn(
+		"anthropic_403_temp_unschedulable",
+		"account_id", account.ID,
+		"until", until,
+		"count", count,
+		"threshold", anthropic403DisableThreshold,
 	)
 	return true
 }
@@ -1467,6 +1530,17 @@ func (s *RateLimitService) ResetOpenAI403Counter(ctx context.Context, accountID 
 	}
 	if err := s.openAI403CounterCache.ResetOpenAI403Count(ctx, accountID); err != nil {
 		slog.Warn("openai_403_reset_failed", "account_id", accountID, "error", err)
+	}
+}
+
+// ResetAnthropic403Counter 在 Anthropic 账号成功响应后清零其连续 403 计数。
+// 这是"连续 N 次"语义的命门：缺它则偶发(不连续)的 403 会在窗口内累计而误触永久禁号。
+func (s *RateLimitService) ResetAnthropic403Counter(ctx context.Context, accountID int64) {
+	if s == nil || s.anthropic403CounterCache == nil || accountID <= 0 {
+		return
+	}
+	if err := s.anthropic403CounterCache.ResetAnthropic403Count(ctx, accountID); err != nil {
+		slog.Warn("anthropic_403_reset_failed", "account_id", accountID, "error", err)
 	}
 }
 
