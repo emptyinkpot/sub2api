@@ -99,6 +99,9 @@
     "primaryPort": 8080,
     "buildCommand": "make build",
     "testCommand": "make test",
+    "acceptanceCommands": [
+      "powershell -ExecutionPolicy Bypass -File .\\tests\\acceptance\\verify-downstream-key.ps1"
+    ],
     "publicHostPort": 80,
     "publicTlsPort": 443,
     "clientOpenAICompatibleBaseUrl": "https://sub2api.tengokukk.com/v1",

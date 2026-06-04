@@ -117,7 +117,9 @@ backend/.installed
 # ===================
 # 其他
 # ===================
-tests
+tests/*
+!tests/acceptance/
+!tests/acceptance/*
 CLAUDE.md
 .claude
 scripts
