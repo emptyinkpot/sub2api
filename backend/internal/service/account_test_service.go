@@ -784,17 +784,6 @@ func (s *AccountTestService) testOpenAICompatibleAPIKeyConnection(c *gin.Context
 	return nil
 }
 
-func buildOpenAICompatibleChatCompletionsURL(base string) string {
-	normalized := strings.TrimRight(strings.TrimSpace(base), "/")
-	if strings.HasSuffix(normalized, "/chat/completions") {
-		return normalized
-	}
-	if strings.HasSuffix(normalized, "/v1") || strings.HasSuffix(normalized, "/v4") {
-		return normalized + "/chat/completions"
-	}
-	return normalized + "/v1/chat/completions"
-}
-
 func extractChatCompletionMessageText(body []byte) (string, error) {
 	var result struct {
 		Choices []struct {
