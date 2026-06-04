@@ -139,3 +139,6 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
+# Local DB/state backups (never commit — may contain credentials)
+/backups/

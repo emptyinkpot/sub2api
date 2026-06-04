@@ -17,3 +17,10 @@ redis_data/
 # Temporary files
 *.tmp
 *.log
+
+# Sensitive backups and exports (contain credentials/secrets — never commit)
+secrets/
+.env.backup*
+*backup*.sql
+docker-compose.yml.*
+*.container.backup.*
