@@ -174,6 +174,27 @@ func (s *TLSFingerprintProfileService) getRandomProfile() *tlsfingerprint.Profil
 //  1. 未启用 TLS 指纹 → 返回 nil（不伪装）
 //  2. 启用 + 绑定了 profile_id → 从缓存查找对应 profile
 //  3. 启用 + 未绑定或找不到 → 返回空 Profile（使用代码内置默认值）
+// ResolveTLSProfileForOpenAI 为 OpenAI apikey 透传路径解析运行时 TLS Profile。
+// 与 ResolveTLSProfile 同构，但 gate 用 IsOpenAITLSFingerprintEnabled（仅 OpenAI apikey），
+// 与 Anthropic 路径隔离，互不影响。
+func (s *TLSFingerprintProfileService) ResolveTLSProfileForOpenAI(account *Account) *tlsfingerprint.Profile {
+	if account == nil || !account.IsOpenAITLSFingerprintEnabled() {
+		return nil
+	}
+	id := account.GetTLSFingerprintProfileID()
+	if id > 0 {
+		if p := s.GetProfileByID(id); p != nil {
+			return p
+		}
+	}
+	if id == -1 {
+		if p := s.getRandomProfile(); p != nil {
+			return p
+		}
+	}
+	return &tlsfingerprint.Profile{Name: "Built-in Default (Node.js 24.x)"}
+}
+
 func (s *TLSFingerprintProfileService) ResolveTLSProfile(account *Account) *tlsfingerprint.Profile {
 	if account == nil || !account.IsTLSFingerprintEnabled() {
 		return nil

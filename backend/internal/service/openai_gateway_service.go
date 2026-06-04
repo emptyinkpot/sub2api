@@ -338,6 +338,7 @@ type OpenAIGatewayService struct {
 	billingCacheService   *BillingCacheService
 	userGroupRateResolver *userGroupRateResolver
 	httpUpstream          HTTPUpstream
+	tlsFPProfileService   *TLSFingerprintProfileService
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
 	toolCorrector         *CodexToolCorrector
@@ -392,6 +393,7 @@ func NewOpenAIGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	tlsFPProfileService *TLSFingerprintProfileService,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
@@ -415,6 +417,7 @@ func NewOpenAIGatewayService(
 			"service.openai_gateway",
 		),
 		httpUpstream:          httpUpstream,
+		tlsFPProfileService:   tlsFPProfileService,
 		deferredService:       deferredService,
 		openAITokenProvider:   openAITokenProvider,
 		toolCorrector:         NewCodexToolCorrector(),
@@ -3236,7 +3239,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	var resp *http.Response
+	if account.IsOpenAITLSFingerprintEnabled() && s.tlsFPProfileService != nil {
+		resp, err = s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfileForOpenAI(account))
+	} else {
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	}
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -5568,6 +5576,9 @@ func shouldUseOpenAICompatibleChatPassthrough(account *Account) bool {
 	}
 	if account.IsOpenAIPassthroughEnabled() {
 		return true
+	}
+	if account.IsOpenAIPassthroughDisabled() {
+		return false
 	}
 	base := strings.ToLower(strings.TrimSpace(account.GetOpenAIBaseURL()))
 	if base == "" {

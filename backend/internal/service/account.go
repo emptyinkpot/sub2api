@@ -1304,6 +1304,19 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
 	return false
 }
 
+// IsOpenAIPassthroughDisabled 返回 OpenAI 账号是否显式禁用了 chat passthrough。
+// 当 extra.openai_passthrough 显式为 false 时返回 true，用于让 wire_api=responses
+// 类型的第三方中转不走 chat completions 透传。
+func (a *Account) IsOpenAIPassthroughDisabled() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	if val, ok := a.Extra["openai_passthrough"].(bool); ok && !val {
+		return true
+	}
+	return false
+}
+
 // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
 //
 // 分类型新字段：
@@ -1580,6 +1593,23 @@ const (
 // 仅这两类账号支持 5h 窗口额度控制和会话数量控制
 func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 	return a.Platform == PlatformAnthropic && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
+}
+
+// IsOpenAITLSFingerprintEnabled 检查 OpenAI apikey 账号是否启用 TLS 指纹伪装。
+// 与 Anthropic 路径的 IsTLSFingerprintEnabled 隔离：仅对 OpenAI apikey 账号生效，
+// 用于让走 chat passthrough 的第三方中转（如 tokenflux.dev）绕过上游对 Go JA3 的
+// 403 \"TLS router\" 拦截。启用条件：extra.enable_tls_fingerprint=true 或绑定了 profile。
+func (a *Account) IsOpenAITLSFingerprintEnabled() bool {
+	if a == nil || !a.IsOpenAI() || a.Type != AccountTypeAPIKey || a.Extra == nil {
+		return false
+	}
+	if v, ok := a.Extra["enable_tls_fingerprint"].(bool); ok && v {
+		return true
+	}
+	if a.GetTLSFingerprintProfileID() != 0 {
+		return true
+	}
+	return false
 }
 
 // IsTLSFingerprintEnabled 检查是否启用 TLS 指纹伪装
