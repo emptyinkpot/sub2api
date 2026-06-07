@@ -79,6 +79,7 @@ Desktop.ini
 # ===================
 tmp/
 temp/
+.tmp-*
 *.tmp
 *.temp
 *.log
@@ -138,6 +139,12 @@ docs/*
 .codex/
 frontend/coverage/
 aicodex
+
+# Local MCP runtime state and private deployment env
+mcp/.env
+mcp/*.env
+mcp/patrol_state.json
+!mcp/.env.example
 output/
 
 # Local DB/state backups (never commit — may contain credentials)

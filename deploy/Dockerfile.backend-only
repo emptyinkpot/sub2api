@@ -1,0 +1,34 @@
+ARG GOLANG_IMAGE=golang:1.26.3-alpine
+ARG ALPINE_IMAGE=alpine:3.20
+ARG GOPROXY=https://goproxy.cn,direct
+ARG GOSUMDB=sum.golang.google.cn
+ARG BUILD_COMMIT=unknown
+ARG BUILD_TYPE=release
+
+FROM ${GOLANG_IMAGE} AS backend-builder
+ARG GOPROXY
+ARG GOSUMDB
+ARG BUILD_COMMIT
+ARG BUILD_TYPE
+ENV GOPROXY=${GOPROXY}
+ENV GOSUMDB=${GOSUMDB}
+RUN apk add --no-cache git ca-certificates tzdata
+WORKDIR /app/backend
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -tags embed -ldflags="-s -w -X main.Commit=${BUILD_COMMIT} -X main.BuildType=${BUILD_TYPE}" -o /app/sub2api ./cmd/server
+
+FROM ${ALPINE_IMAGE}
+LABEL description="Sub2API compiled backend image"
+RUN apk add --no-cache ca-certificates tzdata curl su-exec && rm -rf /var/cache/apk/*
+RUN addgroup -g 1000 sub2api && adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
+WORKDIR /app
+COPY --from=backend-builder /app/sub2api /app/sub2api
+RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
+COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 CMD wget -q -T 5 -O /dev/null http://localhost:8080/health || exit 1
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/sub2api"]

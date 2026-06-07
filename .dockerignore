@@ -55,6 +55,7 @@ logs/
 # Temporary files
 tmp/
 temp/
+.tmp-*
 *.tmp
 
 # Deploy files (not needed in image)

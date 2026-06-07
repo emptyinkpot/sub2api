@@ -1,0 +1,621 @@
+%% sub2api 内部单图总览: 路由 + 鉴权 + 调度 + 转发 + 计费 + 支付 + OAuth/token + 监控 + 自愈 + 管理面
+%% 更新: 2026-06-03 +08 / TLS fingerprint 平台限制放开 + OpenAI passthrough DoWithTLS
+%% 证据: 运行容器日志、Postgres schema、Redis key、docker env、栈帧路径、backend/internal/server/routes 与 backend/internal/service 核心源码
+%% 运行面: server-170 / container=sub2api / port=8080 / health=200
+%% 关键 env: GATEWAY_DISABLE_MODEL_MAPPING=true, GATEWAY_SCHEDULING_LOAD_BATCH_ENABLED=true,
+%%          GATEWAY_SCHEDULING_DB_FALLBACK_ENABLED=true, full_rebuild=300s, outbox_poll=1s
+%% model_mapping 已从 accounts.credentials 全量删除，并由 DB constraint 禁止回写
+%% 强制流式已上线: 文本生成入口统一 forceTextGenerationStream
+%% failover 熔断已上线: 上游 5xx 触发 failover, 账号写入 temp_unschedulable_until=now+2m
+%% per-account 403 软阈值已上线(2026-06-03): account.Credentials.temp_unschedulable_rules 命中关键词的 403 → 冷却N分钟而非硬 SetError; 与上面 5xx failover 是两条独立触发链(packyapi: error_code=403 keyword=bad_response_status_code 2min)
+
+flowchart TB
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE A — 入口与鉴权
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_A["A. 入口与鉴权"]
+        direction TB
+
+        subgraph RUNTIME["0. 运行真相源 / state owners"]
+            direction TB
+            DOCKER["Docker container: sub2api<br/>HTTP :8080<br/>health=/health/deps"]
+            PG["Postgres: sub2api-postgres<br/>ent repositories are source of truth<br/>users/api_keys/groups/account_groups/accounts<br/>usage/billing/payment/subscription/settings/ops"]
+            REDIS["Redis: sub2api-redis<br/>auth/key/subscription/rate cache<br/>sticky_session / scheduler snapshot<br/>concurrency slots / token cache / temp unsched"]
+            ENV["env gates<br/>disable_model_mapping=true<br/>load_batch=true<br/>db_fallback=true<br/>outbox poll=1s / rebuild=300s<br/>DB forbids credentials.model_mapping"]
+            DOCKER --- PG
+            DOCKER --- REDIS
+            DOCKER --- ENV
+        end
+
+        subgraph INGRESS["1. HTTP 入口 / Gin route layer"]
+            direction TB
+            CLIENT["Client<br/>Claude Code / Claude API compatible / OpenAI compatible<br/>key=sk-* or x-api-key<br/>model in body"]
+            ROUTE{"path / protocol"}
+            MSG["/v1/messages<br/>Anthropic Messages"]
+            CHAT["/v1/chat/completions<br/>OpenAI Chat Completions"]
+            RESP["/responses<br/>OpenAI Responses"]
+            APIUSER["/api/v1/auth / user / keys / groups / usage<br/>frontend user plane"]
+            PAYROUTE["/api/v1/payment/*<br/>orders / public config / webhooks / admin payment"]
+            ADMIN["/api/v1/admin/*<br/>admin REST / MCP control"]
+            HEALTH["/health/deps<br/>container health"]
+            CLIENT --> ROUTE
+            ROUTE --> MSG
+            ROUTE --> CHAT
+            ROUTE --> RESP
+            ROUTE --> APIUSER
+            ROUTE --> PAYROUTE
+            ROUTE --> ADMIN
+            ROUTE --> HEALTH
+        end
+
+        subgraph MIDDLEWARE["2. Gateway middleware chain"]
+            direction TB
+            LIMIT["RequestBodyLimit<br/>GATEWAY_MAX_BODY_SIZE"]
+            REQID["ClientRequestID + request logger<br/>生成 client_request_id / request_id"]
+            ENDPOINT["InboundEndpointMiddleware<br/>识别 endpoint/provider/protocol/model/body_bytes"]
+            AUTH{"API key auth<br/>api_keys.key active?<br/>not deleted / not expired / quota ok"}
+            GROUP_REQ{"RequireGroupAssignment<br/>api_key.group_id exists?"}
+            E401["401 Unauthorized<br/>key 无效/禁用/过期"]
+            E403["403 Forbidden / quota<br/>额度/IP/订阅限制"]
+            E424["424 bad upstream response<br/>工具侧或 MCP 包装层可能显示为 API Error"]
+            LIMIT --> REQID --> ENDPOINT --> AUTH
+            AUTH -->|fail| E401
+            AUTH -->|quota/ip/subscription fail| E403
+            AUTH -->|ok| GROUP_REQ
+            GROUP_REQ -->|no group| E403
+        end
+        MSG --> LIMIT
+        CHAT --> LIMIT
+        RESP --> LIMIT
+
+        subgraph GROUPING["3. key -> group -> provider policy"]
+            direction TB
+            KEYMETA["api_keys<br/>例: claude key -> group1<br/>codex key -> group3"]
+            GROUPMETA["groups<br/>group1: platform=anthropic<br/>group3: platform=openai"]
+            PROTO{"protocol family"}
+            ANTHRO["Anthropic path<br/>/v1/messages<br/>platform=anthropic"]
+            OPENAI_CHAT["OpenAI-compatible Anthropic path<br/>/v1/chat/completions may route to anthropic accounts"]
+            OPENAI_RESP["OpenAI path<br/>/responses routes to group3 openai accounts"]
+            GROUP_REQ --> KEYMETA --> GROUPMETA --> PROTO
+            PROTO --> ANTHRO
+            PROTO --> OPENAI_CHAT
+            PROTO --> OPENAI_RESP
+        end
+
+        subgraph USER_AUTH["16. User auth, settings, and API key lifecycle"]
+            direction TB
+            SETTINGS["SettingService<br/>runtime settings from DB<br/>registration/email verify/turnstile<br/>OIDC/LinuxDo/WeChat config<br/>model fallback, stream timeout, beta policy,<br/>rectifier, Claude Code version bounds"]
+            REGISTER["AuthService.Register<br/>email policy + optional verify code<br/>password hash + user create<br/>promo/invitation/affiliate binding"]
+            LOGIN["AuthService.Login/OAuth<br/>password or provider identity<br/>email-first bind defaults<br/>touch last login"]
+            JWT["JWT access token + refresh token family<br/>ValidateToken / RefreshTokenPair<br/>revoke single/all sessions"]
+            USER_PROFILE["UserService<br/>profile/password/concurrency<br/>auth identities bind/unbind<br/>TOTP / notify email"]
+            KEY_LIFE["APIKeyService<br/>GenerateKey / custom key validation<br/>Create/List/Update/Delete<br/>group bind permission<br/>IP rules, quota, expiry, rate usage"]
+            PUB_SETTINGS["public settings view<br/>frontend auth/payment/OAuth feature flags"]
+            SETTINGS --> REGISTER --> JWT
+            SETTINGS --> LOGIN --> JWT
+            JWT --> USER_PROFILE
+            JWT --> KEY_LIFE
+            SETTINGS --> PUB_SETTINGS
+            KEY_LIFE -.creates and updates.-> KEYMETA
+        end
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE B — 调度与转发主链
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_B["B. 调度与转发主链"]
+        direction TB
+
+        subgraph STREAM_POLICY["4. Stream policy / force text generation streaming"]
+            direction TB
+            FORCE_STREAM["forceTextGenerationStream<br/>/v1/messages, /v1/chat/completions, /v1/responses,<br/>OpenAI-compatible messages/responses text paths<br/>set JSON stream=true before moderation, scheduling, and forward"]
+            NON_TEXT["non-text endpoints excluded<br/>embeddings / images / count_tokens / models"]
+            FORCE_STREAM -.does not apply.-> NON_TEXT
+        end
+
+        subgraph MODERATION["4b. Content moderation precheck"]
+            direction TB
+            MOD_START["content_moderation.gateway_check_start"]
+            MOD_ENABLED{"moderation enabled?"}
+            MOD_ALLOW["allowed=true<br/>continue"]
+            MOD_BLOCK["blocked/flagged<br/>return moderation action"]
+            MOD_START --> MOD_ENABLED
+            MOD_ENABLED -->|disabled in logs| MOD_ALLOW
+            MOD_ENABLED -->|enabled + flagged| MOD_BLOCK
+        end
+
+        subgraph STICKY["5. Sticky session"]
+            direction TB
+            HASH_SRC{"hash source"}
+            META_HASH["metadata_user_id<br/>session_id + device_id<br/>Claude Code 常见"]
+            BODY_HASH["message_content_fallback<br/>large body hash"]
+            EMPTY_HASH["generated hash<br/>无 metadata 时生成"]
+            CACHE_LOOKUP["Redis lookup<br/>sticky_session:{group_id}:{session_hash}"]
+            BOUND{"bound_account_id > 0?"}
+            STICKY_ACC["sticky_account_id candidate<br/>仍必须过调度门"]
+            NO_STICKY["no sticky account<br/>走正常候选遍历"]
+            HASH_SRC --> META_HASH --> CACHE_LOOKUP
+            HASH_SRC --> BODY_HASH --> CACHE_LOOKUP
+            HASH_SRC --> EMPTY_HASH --> CACHE_LOOKUP
+            CACHE_LOOKUP --> BOUND
+            BOUND -->|yes| STICKY_ACC
+            BOUND -->|no| NO_STICKY
+        end
+
+        subgraph LOAD["6. Candidate loading / scheduler source"]
+            direction TB
+            ENTRY["sticky.scheduler_entry<br/>group_id, session_hash, model,<br/>sticky_account_id, load_batch, excluded_count"]
+            LOAD_BATCH{"load_batch enabled?"}
+            REDIS_SCHED["Redis scheduling cache<br/>sched:acc, sched:meta,<br/>concurrency slots"]
+            DB_FALLBACK{"cache miss/stale/error<br/>db_fallback enabled?"}
+            DB_QUERY["DB source of truth<br/>accounts join account_groups<br/>where group_id + platform + deleted_at is null"]
+            REBUILD["outbox poll / full rebuild<br/>refresh scheduler cache"]
+            CANDIDATES["candidate accounts<br/>ordered by account_groups.priority + account priority/load"]
+            ENTRY --> LOAD_BATCH
+            LOAD_BATCH -->|yes| REDIS_SCHED
+            LOAD_BATCH -->|no| DB_QUERY
+            REDIS_SCHED --> DB_FALLBACK
+            DB_FALLBACK -->|yes| DB_QUERY
+            DB_FALLBACK -->|no| CANDIDATES
+            DB_QUERY --> CANDIDATES
+            REBUILD -.refresh.-> REDIS_SCHED
+        end
+
+        subgraph SELECT["7. SelectAccountWithLoadAwareness / account gates"]
+            direction TB
+            TRY["Try candidate account<br/>sticky first, then normal candidates"]
+            G_STATUS{"gate 1: schedulable state<br/>status=active<br/>schedulable=true<br/>not deleted<br/>not temp_unschedulable<br/>not overload / rate_limited"}
+            G_MODEL{"gate 2: model support<br/>local whitelist removed<br/>scheduler must not reject by model name<br/>model is passed through to upstream"}
+            G_MODEL_ROUTE{"gate 3: model rewrite<br/>removed for accounts.credentials.model_mapping<br/>no local alias table; upstream owns model validity"}
+            G_LIMIT{"gate 4: limits<br/>model rate limit / RPM / concurrency<br/>daily-weekly-monthly group quota<br/>session window cost"}
+            SLOT{"Acquire concurrency slot<br/>concurrency:account:{id}"}
+            PICK["account_selected<br/>slot_acquired=true<br/>write sticky session if needed"]
+            SKIP["skip account<br/>try next candidate"]
+            NO_ACCOUNT["503 No available accounts<br/>sub2api scheduling layer<br/>no candidate passed gates"]
+            TRY --> G_STATUS
+            G_STATUS -->|fail| SKIP
+            G_STATUS -->|pass| G_MODEL
+            G_MODEL -->|fail| SKIP
+            G_MODEL -->|pass| G_MODEL_ROUTE
+            G_MODEL_ROUTE --> G_LIMIT
+            G_LIMIT -->|fail| SKIP
+            G_LIMIT -->|pass| SLOT
+            SLOT -->|fail/wait timeout| SKIP
+            SLOT -->|ok| PICK
+            SKIP -->|more candidates| TRY
+            SKIP -->|exhausted| NO_ACCOUNT
+        end
+
+        subgraph FORWARD["9. Forward / upstream request"]
+            direction TB
+            MAP_MODEL["Model passthrough<br/>outbound model = original request model<br/>local account model_mapping removed"]
+            BUILD_REQ["Build upstream request<br/>account base_url + account api key<br/>text generation body already stream=true<br/>protocol-specific body transform"]
+            SEND["HTTP upstream call<br/>account platform/type/provider"]
+            UP_RESP{"upstream status"}
+            PICK --> MAP_MODEL --> BUILD_REQ --> SEND --> UP_RESP
+        end
+
+        subgraph PROTOCOLS["17. Protocol adapters / platform-specific gateway services"]
+            direction TB
+            ANTH_MSG["GatewayService.Messages<br/>Anthropic messages -> upstream Claude-like account"]
+            ANTH_COUNT["GatewayService.CountTokens<br/>unsupported for OpenAI groups"]
+            ANTH_RESP["GatewayService.Responses<br/>Anthropic compatible Responses bridge"]
+            ANTH_CHAT["GatewayService.ChatCompletions<br/>OpenAI-compatible request transformed to Anthropic where needed"]
+            GEMINI_NATIVE["Gemini native /v1beta<br/>Google error writer<br/>models:list/get/generateContent/streamGenerateContent"]
+            OPENAI_RESP_SVC["OpenAIGatewayService.Responses<br/>Codex/OpenAI Responses API<br/>previous_response_id/session/codex snapshot support"]
+            OPENAI_CHAT_SVC["OpenAIGatewayService.ChatCompletions<br/>chat API, tools, image/embedding variants"]
+            OPENAI_WS["ResponsesWebSocket / realtime<br/>GET /responses and WS QPS ops surface"]
+            ANTI_FORCE["Antigravity forced platform<br/>/antigravity/v1 and /v1beta never mix normal group scheduling"]
+            OPENAI_RESP_SVC --> OPENAI_WS
+            OPENAI_CHAT_SVC --> OPENAI_WS
+        end
+
+        subgraph OPENAI_SCHED["18. OpenAI account scheduler / advanced routing"]
+            direction TB
+            OAI_REQ["OpenAI request context<br/>model, endpoint, previous_response_id,<br/>session_hash, codex mode, transport"]
+            PREV_LAYER{"previous_response_id layer"}
+            SESSION_LAYER{"session_hash layer"}
+            LB_LAYER{"load_balance layer"}
+            ADV_SETTINGS["advanced scheduler settings<br/>enabled layers, top-K, EWMA,<br/>transport/capability compatibility"]
+            ERR_SCORE["EWMA error / TTFT / recent failure score<br/>429/403 reset signals<br/>WS snapshot state"]
+            WEIGHTED_PICK["weighted top-K pick<br/>then account concurrency slot"]
+            OAI_FALLBACK["fallback to DB/snapshot cache<br/>same source-of-truth rules as general scheduler"]
+            OAI_REQ --> PREV_LAYER --> SESSION_LAYER --> LB_LAYER
+            ADV_SETTINGS --> LB_LAYER
+            ERR_SCORE --> LB_LAYER
+        end
+    end
+
+    %% PLANE B 跨段连接
+    ANTHRO --> FORCE_STREAM
+    OPENAI_CHAT --> FORCE_STREAM
+    OPENAI_RESP --> FORCE_STREAM
+    FORCE_STREAM --> MOD_START
+    MOD_ALLOW --> HASH_SRC
+    STICKY_ACC --> ENTRY
+    NO_STICKY --> ENTRY
+    CANDIDATES --> TRY
+    ANTHRO --> ANTH_MSG
+    OPENAI_CHAT --> ANTH_CHAT
+    OPENAI_RESP --> OPENAI_RESP_SVC
+    MSG --> ANTH_COUNT
+    GEMINI_NATIVE --> PROTO
+    ANTI_FORCE --> PROTO
+    OPENAI_RESP_SVC --> OAI_REQ
+    OPENAI_CHAT_SVC --> OAI_REQ
+    LB_LAYER --> WEIGHTED_PICK --> PICK
+    LB_LAYER --> OAI_FALLBACK --> CANDIDATES
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE C — 状态与自愈
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_C["C. 状态与自愈"]
+        direction TB
+
+        subgraph ERROR_SEMANTICS["10. Response/error semantics"]
+            direction TB
+            OK["200 success<br/>stream or non-stream relay to client"]
+            USAGE["usage/cost accounting<br/>usage_logs / billing_usage_entries<br/>deferred last_used flush"]
+            UP400["400 upstream non-retryable<br/>example: 错误的格式,请回退至无错误位置重新发送<br/>source=selected upstream account, not scheduler"]
+            UP401["401/403 upstream auth/quota<br/>upstream key/credit/provider rejection"]
+            UP429["429/rate limit<br/>mark rate_limited/reset when applicable"]
+            UP5XX["5xx/timeout/network<br/>retry/failover if possible<br/>failover circuit writes temp_unschedulable_until=now+2m"]
+            WRAP["sub2api error wrapper<br/>client may see data:{type:error,error:{type:upstream_error,message:Upstream request failed}}"]
+            OK --> USAGE
+            UP400 --> WRAP
+            UP401 --> WRAP
+            UP429 --> WRAP
+            UP5XX --> WRAP
+        end
+
+        subgraph LIMITS_STATE["19. Limits and account state transitions"]
+            direction TB
+            MODEL_LIMIT["ModelRateLimitService<br/>model-specific RPM/TPM/window rules<br/>platform-specific 401/403/429/529 handling"]
+            RATE_LIMIT["RateLimitService<br/>account rate_limited/reset_at<br/>Gemini quota precheck<br/>session window usage update<br/>stream timeout handling"]
+            CONCURRENCY["ConcurrencyService<br/>account/user slot acquire/release<br/>waiting counts, batch load<br/>cleanup worker"]
+            TEMP_UNSCHED["Temp unschedulable cache/DB<br/>refresh fail, upstream 5xx failover circuit, overload cooldown<br/>scheduler cache excludes until recovery"]
+            CLEAR_STATE["admin clear_error / clear_rate_limit<br/>recover_state / reset_quota / schedulable toggle"]
+            MODEL_LIMIT --> RATE_LIMIT --> CONCURRENCY
+        end
+
+        subgraph TOKEN_OAUTH["20. OAuth and token lifecycle"]
+            direction TB
+            OAUTH_ADMIN["admin OAuth/account onboarding<br/>OpenAI/Gemini/Antigravity auth URL<br/>code exchange/cookie import/service account"]
+            TOKEN_IF["TokenRefresher interface<br/>Claude/OpenAI/Gemini/Antigravity implementations<br/>CacheKey / CanRefresh / NeedsRefresh / Refresh"]
+            TOKEN_PROVIDER["request-path token providers<br/>GetAccessToken<br/>cache lookup + refresh skew<br/>distributed refresh locks"]
+            TOKEN_REFRESH["TokenRefreshService background loop<br/>list active accounts<br/>refreshWithRetry<br/>write credentials + invalidate token cache"]
+            PRIVACY["post-refresh privacy actions<br/>OpenAI/Antigravity privacy settings<br/>proxy-aware refresh APIs"]
+            REFRESH_FAIL["repeated refresh failure<br/>SetError or temp unschedulable<br/>scheduler excludes account"]
+            OAUTH_ADMIN --> TOKEN_IF
+            TOKEN_IF --> TOKEN_PROVIDER
+            TOKEN_IF --> TOKEN_REFRESH --> PRIVACY
+            TOKEN_REFRESH -->|failure| REFRESH_FAIL
+        end
+
+        subgraph HEAL["12. Scheduled test runner / auto-heal"]
+            direction TB
+            TICK["scheduled_test_runner tick<br/>found due plans + baseline recovery accounts"]
+            PLAN["scheduled_test_plans<br/>account_id + model_id + cron + auto_recover"]
+            BASELINE["baseline recovery scan<br/>enumerate all accounts<br/>disabled/error/unsched/blocked/error-message candidates<br/>skip due-plan accounts; 15m process throttle"]
+            RUNTEST["RunTestBackground<br/>AccountTestService.TestAccountConnection"]
+            TEST_OK{"test result success?"}
+            RECOVER["RecoverAccountAfterSuccessfulTest<br/>clear error / rate limit / temp unschedulable<br/>return to scheduling"]
+            STAY_BAD["keep disabled/error/rate_limited<br/>next cron retries"]
+            TEST_503["observed scheduled test 503<br/>API returned Service temporarily unavailable"]
+            TICK --> PLAN --> RUNTEST --> TEST_OK
+            TICK --> BASELINE --> RUNTEST
+            TEST_OK -->|yes + auto_recover| RECOVER
+            TEST_OK -->|no| STAY_BAD
+            RUNTEST -.can produce.-> TEST_503
+        end
+    end
+
+    %% PLANE C 跨段连接
+    UP_RESP -->|2xx| OK
+    UP_RESP -->|400| UP400
+    UP_RESP -->|401/403| UP401
+    UP_RESP -->|429| UP429
+    UP_RESP -->|5xx/timeout| UP5XX
+    G_LIMIT --> MODEL_LIMIT
+    CONCURRENCY --> SLOT
+    UP401 --> RATE_LIMIT
+    UP429 --> RATE_LIMIT
+    UP5XX --> TEMP_UNSCHED
+    TEMP_UNSCHED --> G_STATUS
+    TOKEN_PROVIDER --> BUILD_REQ
+    TOKEN_REFRESH -->|success| REBUILD
+    REFRESH_FAIL --> TEMP_UNSCHED
+    UP5XX -.may create healing signal.-> PLAN
+    RECOVER -.refresh candidates.-> REBUILD
+    CLEAR_STATE --> REBUILD
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE D — 计费与商业
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_D["D. 计费与商业"]
+        direction TB
+
+        subgraph BILLING["21. Usage accounting and billing"]
+            direction TB
+            RECORD_USAGE["GatewayService.RecordUsage / OpenAIGateway record usage<br/>extract tokens/cache/image/request units<br/>deferred last_used flush"]
+            PRICING["BillingService pricing resolution<br/>channel model pricing > remote LiteLLM/catalog > fallback<br/>token/per-request/image price<br/>service tier and long-context multipliers"]
+            COST["CalculateCostUnified<br/>input/output/cache creation/cache read<br/>per request/image count/rate multiplier<br/>CostBreakdown"]
+            WRITE_USAGE["write usage_logs and billing_usage_entries<br/>update api key quota/rate usage<br/>update subscription window cost"]
+            USER_QUOTA["APIKey quota and expiry<br/>balance mode or subscription mode<br/>RunModeSimple skips billing enforcement"]
+            SUB_WINDOWS["SubscriptionService<br/>assign/extend/revoke/list<br/>daily weekly monthly windows<br/>validate active group limits<br/>RecordUsage"]
+            RECORD_USAGE --> PRICING --> COST --> WRITE_USAGE
+            WRITE_USAGE --> SUB_WINDOWS
+        end
+
+        subgraph PAYMENT_DOMAIN["22. Payment / redeem / subscription fulfillment"]
+            direction TB
+            PAY_CONFIG["PaymentConfigService<br/>plans/providers/method instances<br/>limits and visible methods"]
+            CREATE_ORDER["PaymentService.CreateOrder<br/>validate amount/plan/user/provider snapshot<br/>pending order"]
+            PROVIDER_CALL["provider client<br/>checkout / JSAPI / QR / external payment URL"]
+            WEBHOOK["PaymentWebhookProvider<br/>verify signature + parse event<br/>idempotent order lookup"]
+            ORDER_STATE["Payment order lifecycle<br/>pending -> paid/recharging -> completed<br/>failed/refunded/cancelled/expired"]
+            FULFILL["PaymentFulfillment<br/>balance recharge or subscription assignment<br/>quota window initialization"]
+            REDEEM["RedeemService<br/>code validation/use<br/>balance or subscription grant"]
+            AFFILIATE["AffiliateService<br/>invite code bind<br/>rebate accrual<br/>transfer affiliate quota<br/>admin custom rebate rates"]
+            PAY_CONFIG --> CREATE_ORDER --> PROVIDER_CALL --> ORDER_STATE
+            WEBHOOK --> ORDER_STATE --> FULFILL
+            REDEEM --> FULFILL
+            FULFILL --> SUB_WINDOWS
+            FULFILL --> AFFILIATE
+        end
+
+        subgraph CHANNELS["23. Channels, provider catalog, monitors, passthrough rules"]
+            direction TB
+            PROVIDER_CAT["provider catalog / channel definitions<br/>platform capability, default base URL,<br/>model catalog and pricing metadata"]
+            CHANNEL_CFG["channels and channel pricing<br/>group/account/channel restriction<br/>model/channel rate multiplier"]
+            ERROR_RULES["error passthrough rules<br/>which upstream error/status/body can pass unchanged<br/>otherwise normalize to gateway error wrapper"]
+            TLS_FP["TLS fingerprint profiles<br/>所有平台账号均可绑定 TLS profile (含 OpenAI apikey passthrough 路径)<br/>extra.enable_tls_fingerprint=true + tls_fingerprint_profile_id 即启用<br/>⚠ CF 前置 new-api 上游(packyapi 类)用 profile 5=chrome_135_h1only:<br/>Node.js 默认指纹/profile3 会触发 ForceAttemptHTTP2:false × h2 ALPN 协议错<br/>改 profile 必须同时 bump concurrency(缓存键含concurrency不含profile)<br/>解决 packyapi/tokenflux 等 CF JA3 拦截"]
+            MONITOR_TPL["channel monitor templates<br/>HTTP checks, validation rules, challenge/SSRF guard"]
+            MONITOR_RUN["channel monitor runner/checker/aggregator<br/>scheduled checks, status aggregation,<br/>admin/user monitor views"]
+            PROVIDER_CAT --> CHANNEL_CFG
+            MONITOR_TPL --> MONITOR_RUN
+        end
+    end
+
+    %% PLANE D 跨段连接
+    USAGE --> RECORD_USAGE
+    WRITE_USAGE --> KEY_LIFE
+    CHANNEL_CFG --> PRICING
+    ERROR_RULES --> WRAP
+    TLS_FP --> SEND
+    FULFILL --> KEY_LIFE
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE E — 管理面与运维
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_E["E. 管理面与运维"]
+        direction TB
+
+        subgraph MGMT["13. Admin/MCP mutation paths"]
+            direction TB
+            ADMIN_AUTH["admin auth / x-api-key"]
+            ACC_OPS["accounts operations<br/>status/schedulable/priority/concurrency<br/>credentials.model_mapping is blocked by DB constraint"]
+            GROUP_OPS["groups operations<br/>platform/model_routing/supported scopes"]
+            TEST_OPS["test_account / scheduled tests / clear_error"]
+            KEY_OPS["api_keys operations<br/>group binding/status/quota"]
+            ADMIN_AUTH --> ACC_OPS
+            ADMIN_AUTH --> GROUP_OPS
+            ADMIN_AUTH --> TEST_OPS
+            ADMIN_AUTH --> KEY_OPS
+        end
+
+        subgraph ROUTER_SURFACE["15. Router surface / server/router.go + routes/*"]
+            direction TB
+            GLOBAL_MW["global middleware<br/>RequestLogger / Logger / CORS<br/>SecurityHeaders dynamic frame-src<br/>embedded frontend middleware"]
+            COMMON_ROUTES["common routes<br/>health/status/static/frontend"]
+            AUTH_ROUTES["/api/v1/auth<br/>register/login/logout/refresh<br/>OAuth connect callbacks<br/>verify code/password reset/settings"]
+            USER_ROUTES["/api/v1/user + keys + groups + channels + usage<br/>profile/password/email/TOTP<br/>API key CRUD and available groups<br/>redeem/subscriptions/channel monitors"]
+            PAYMENT_ROUTES["/api/v1/payment<br/>orders create/list/detail/cancel/resume/refund<br/>public plans/providers/config<br/>provider webhooks<br/>admin payment plans/providers/orders/stats"]
+            ADMIN_ROUTES["/api/v1/admin<br/>dashboard/users/groups/accounts<br/>OAuth/proxies/redeem/promo/settings<br/>data/backups/system/subscriptions/usage<br/>ops/scheduled tests/channels/monitors/affiliate"]
+            GATEWAY_ROUTES["gateway routes<br/>/v1/*, root aliases, /backend-api/codex<br/>/v1beta Gemini native<br/>/antigravity/* forced platform"]
+            GLOBAL_MW --> COMMON_ROUTES
+            GLOBAL_MW --> AUTH_ROUTES
+            GLOBAL_MW --> USER_ROUTES
+            GLOBAL_MW --> PAYMENT_ROUTES
+            GLOBAL_MW --> ADMIN_ROUTES
+            GLOBAL_MW --> GATEWAY_ROUTES
+        end
+
+        subgraph ACCOUNT_LIFE["26. Account lifecycle / admin fanout"]
+            direction TB
+            ACCOUNT_CRUD["account CRUD/import/export/bulk<br/>platform/type/base_url/proxy/priority/concurrency<br/>credentials without model_mapping"]
+            ACCOUNT_TESTS["account test/recover-state/refresh-tier<br/>Claude/OpenAI/Gemini/Coze/GLM/Antigravity/images<br/>stream processors"]
+            ACCOUNT_OAUTH["OAuth exchange/cookie/service-account import<br/>build credentials then test before scheduling"]
+            ACCOUNT_FLAGS["set privacy / clear error / reset quota<br/>temp-unsched / schedulable / models endpoint"]
+            ACCOUNT_GROUPS["account_groups binding<br/>group membership, priority, restrictions<br/>scheduler snapshot owner"]
+            ACCOUNT_CRUD --> ACCOUNT_GROUPS
+            ACCOUNT_OAUTH --> TOKEN_IF
+            ACCOUNT_TESTS --> RUNTEST
+            ACCOUNT_FLAGS --> CLEAR_STATE
+            ACCOUNT_CRUD --> PG
+        end
+
+        subgraph OPS["24. Ops and observability"]
+            direction TB
+            OPS_LOG["OpsErrorLogger + request/upstream context<br/>request id, account id, endpoint, model,<br/>upstream status, retry context"]
+            OPS_METRICS["OpsService collectors<br/>dashboard v2, trends, histograms,<br/>window stats, health score, account availability"]
+            OPS_REALTIME["realtime traffic and WS QPS<br/>model/account/user concurrency views"]
+            OPS_ERRORS["errors/request-errors/upstream-errors/retry drilldown<br/>request details with redaction"]
+            OPS_ALERTS["alert evaluator + scheduled reports<br/>email notification config<br/>system log sink/service"]
+            OPS_RUNTIME["runtime and advanced settings<br/>cleanup service, advisory lock,<br/>query mode, log runtime"]
+            OPS_LOG --> OPS_METRICS --> OPS_REALTIME
+            OPS_LOG --> OPS_ERRORS
+            OPS_METRICS --> OPS_ALERTS
+            OPS_RUNTIME --> OPS_METRICS
+        end
+
+        subgraph DATA_SYSTEM["25. Data management, backup, system"]
+            direction TB
+            BACKUP["BackupService<br/>create/list/download/restore/delete backup artifacts"]
+            DATA_MGMT["DataManagementService<br/>export/import/purge domain data<br/>grpc helper path for bulk operations"]
+            SYSTEM["system/admin maintenance<br/>runtime settings, announcements,<br/>promo codes, user attributes,<br/>admin API key generation"]
+            OUTBOX["scheduler outbox + snapshot hydration<br/>account/group mutation publishes cache rebuild work"]
+            BACKGROUND["background workers<br/>token refresh loop<br/>scheduled tests every minute<br/>order expiry service<br/>ops cleanup/reports<br/>channel monitor runner"]
+            BACKUP --> PG
+            DATA_MGMT --> PG
+            BACKGROUND --> TOKEN_REFRESH
+            BACKGROUND --> TICK
+            BACKGROUND --> MONITOR_RUN
+            BACKGROUND --> ORDER_STATE
+        end
+    end
+
+    %% PLANE E 跨段连接
+    ROUTE --> GLOBAL_MW
+    APIUSER --> AUTH_ROUTES
+    APIUSER --> USER_ROUTES
+    PAYROUTE --> PAYMENT_ROUTES
+    ADMIN --> ADMIN_ROUTES
+    GATEWAY_ROUTES --> PROTOCOLS
+    AUTH_ROUTES --> SETTINGS
+    USER_ROUTES --> USER_AUTH
+    KEY_LIFE -.used by.-> AUTH
+    USER_ROUTES --> REDEEM
+    USER_ROUTES --> MONITOR_RUN
+    PAYMENT_ROUTES --> PAYMENT_DOMAIN
+    ADMIN_ROUTES --> PAY_CONFIG
+    ADMIN_ROUTES --> AFFILIATE
+    ADMIN_ROUTES --> CHANNELS
+    ADMIN_ROUTES --> OPS
+    ADMIN_ROUTES --> DATA_SYSTEM
+    ADMIN_ROUTES --> OAUTH_ADMIN
+    ADMIN --> ADMIN_AUTH
+    ACC_OPS --> ACCOUNT_LIFE
+    ACC_OPS -.writes.-> PG
+    GROUP_OPS -.writes.-> PG
+    KEY_OPS -.writes.-> PG
+    TEST_OPS -.runs.-> RUNTEST
+    ACC_OPS -.requires cache rebuild/outbox.-> REBUILD
+    ACC_OPS --> CLEAR_STATE
+    ACCOUNT_GROUPS --> CANDIDATES
+    ACCOUNT_GROUPS --> OUTBOX
+    OUTBOX --> REBUILD
+    SYSTEM --> SETTINGS
+    SEND --> OPS_LOG
+    WRAP --> OPS_LOG
+    OK --> OPS_LOG
+    USER_QUOTA --> AUTH
+    SUB_WINDOWS --> AUTH
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PLANE F — 真值/不变量与排障
+    %% ═══════════════════════════════════════════════════════════════
+    subgraph PLANE_F["F. 真值 / 不变量 / 排障"]
+        direction TB
+
+        subgraph MODEL_POLICY["27. Model policy invariant"]
+            direction TB
+            MP1["No local per-account model whitelist<br/>accounts.credentials.model_mapping deleted from all rows"]
+            MP2["DB constraint accounts_credentials_no_model_mapping<br/>blocks reintroduction through admin/API/import paths"]
+            MP3["Scheduler may filter by platform/capability/rate/concurrency<br/>but must not reject unknown model names locally"]
+            MP4["Unknown or bad model is forwarded to selected upstream<br/>upstream returns model_not_found/400/etc<br/>that is a provider error, not local doorkeeping"]
+            MP1 --> MP2 --> MP3 --> MP4
+        end
+
+        subgraph TROUBLESHOOT["14. Error triage decision table"]
+            direction TB
+            T503["No available accounts<br/>look at group binding, account_groups, schedulable,<br/>temp_unschedulable, Redis scheduler cache, live capacity<br/>not local model whitelist"]
+            T400["HTTP 400 after account_selected<br/>look at selected account upstream and exact request body/protocol<br/>not fixed by adding more schedulable accounts"]
+            T5XX["HTTP 5xx after account_selected<br/>upstream unstable; failover circuit temp-unschedules account<br/>pool still needs at least one alternate healthy account"]
+            T424["MCP/API Error 424 wrapper<br/>inspect inner body and sub2api logs by request id"]
+        end
+
+        subgraph STABILITY_INVARIANTS["28. Stability invariants / 号源适配抽象 (架构级)"]
+            direction TB
+            SI1["AXIS-1 认证形态<br/>API key / OAuth refresh / Cookie+cf / SVC-Account JWT / sigv4 / 反代<br/>抽象目标: TokenRefresher 扩展为通用 CredentialProvider plugin<br/>加新认证族 = 新插件 + 一行配置, 不改 Go 主线"]
+            SI2["AXIS-2 协议形态<br/>Anthropic / OpenAI chat / Responses / Gemini / Bedrock / Vertex<br/>抽象目标: native pass-through 已选, 维持原则<br/>所有未知字段透传, 不在网关侧裁剪"]
+            SI3["AXIS-3 限额形态<br/>per-token / per-request / 订阅窗口 / 余额 / 月配额 / 并发<br/>抽象目标: 单一 AvailabilityOracle 收敛 4 store 状态<br/>(rate / temp_unsched / overload / error) 因果一致"]
+            SI4["AXIS-4 失败语义<br/>(上游 × 状态码 × body 模式 → 动作) 四元组规则表<br/>动作: retry / failover / disable / cooldown / refresh / quarantine<br/>规则可热更新, 不写死在 Go"]
+            SI5["AXIS-5 健康判定 (探活分级)<br/>L0 auth probe (models list, 0 token)<br/>L1 quota probe (count_tokens 或最小请求)<br/>L2 generation probe (完整 chat, 仅长期无真实流量号)<br/>失败语义沿 L0->L1->L2 因果上推"]
+
+            SI6["FEEDBACK 真实流量信号 = 探活信号<br/>真实 forward 200 N 次 -> 推迟下次探活<br/>真实 5xx 比例突变 -> 立刻触发 L0 探活<br/>把熔断和探活两条链合并成单一反馈环"]
+            SI7["BACKOFF 探活间隔 = 号动荡度的函数<br/>连续 N 次成功 -> 间隔 x2 封顶 2h<br/>真实 5xx -> 间隔 /2 下限 1min<br/>刚 recover -> 5min x3 强校验后入正常档<br/>探活预算自动从稳号腾给抖号"]
+            SI8["EQUIV-CLASS 号源族<br/>同 OAuth 端点 / 同代理 / 同子网 / 同购买批次 = 一族<br/>同族同时坏掉 -> 一号探活成功后批量轻量复测<br/>避免 N 次重复烧 token, 加速归因"]
+            SI9["LIMIT-LEARN 限额自学习<br/>真实 RPS + 成功率 -> 自动收敛安全配额 (AIMD)<br/>不靠人预填 RPM/TPM 规则<br/>号一进来半天后系统自学其容量曲线"]
+
+            SI1 --> SI3
+            SI2 --> SI4
+            SI3 --> SI4
+            SI4 --> SI5
+            SI5 --> SI6
+            SI6 --> SI7
+            SI7 --> SI8
+            SI8 --> SI9
+        end
+    end
+
+    %% PLANE F 跨段连接
+    MP3 --> G_MODEL
+    MP4 --> MAP_MODEL
+    NO_ACCOUNT --> T503
+    UP400 --> T400
+    UP5XX --> T5XX
+    E424 --> T424
+    SI3 -.future consumer.-> G_STATUS
+    SI5 -.future shape of.-> RUNTEST
+    SI6 -.future signal from.-> SEND
+    SI7 -.future schedule of.-> TICK
+    SI9 -.future replacement for.-> MODEL_LIMIT
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% 样式
+    %% ═══════════════════════════════════════════════════════════════
+    classDef state fill:#f8fafc,stroke:#64748b,color:#0f172a,stroke-width:1px;
+    classDef proc fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1px;
+    classDef gate fill:#fffbeb,stroke:#d97706,color:#78350f,stroke-width:1px;
+    classDef ok fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1px;
+    classDef err fill:#fef2f2,stroke:#dc2626,color:#7f1d1d,stroke-width:1px;
+    classDef warn fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1px;
+    classDef heal fill:#faf5ff,stroke:#9333ea,color:#581c87,stroke-width:1px;
+
+    class DOCKER,PG,REDIS,ENV,KEYMETA,GROUPMETA state;
+    class CLIENT,ROUTE,MSG,CHAT,RESP,ADMIN,HEALTH,LIMIT,REQID,ENDPOINT,FORCE_STREAM,NON_TEXT,MOD_START,META_HASH,BODY_HASH,EMPTY_HASH,CACHE_LOOKUP,ENTRY,REDIS_SCHED,DB_QUERY,REBUILD,CANDIDATES,TRY,MAP_MODEL,BUILD_REQ,SEND,WRAP proc;
+    class AUTH,GROUP_REQ,PROTO,MOD_ENABLED,HASH_SRC,BOUND,LOAD_BATCH,DB_FALLBACK,G_STATUS,G_MODEL,G_MODEL_ROUTE,G_LIMIT,SLOT,UP_RESP,TEST_OK gate;
+    class MOD_ALLOW,STICKY_ACC,NO_STICKY,PICK,OK,USAGE,RECOVER ok;
+    class E401,E403,E424,NO_ACCOUNT,UP400,UP401,UP429,UP5XX,T503,T400,T5XX,T424 err;
+    class SKIP,TEST_503 warn;
+    class TICK,PLAN,BASELINE,RUNTEST,STAY_BAD,ADMIN_AUTH,ACC_OPS,GROUP_OPS,TEST_OPS,KEY_OPS heal;
+
+    %% PLANE 超级分块色
+    style PLANE_A fill:#eef4ff,stroke:#3b82f6,stroke-width:2px;
+    style PLANE_B fill:#fffbe6,stroke:#d97706,stroke-width:2px;
+    style PLANE_C fill:#f5edff,stroke:#7c3aed,stroke-width:2px;
+    style PLANE_D fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+    style PLANE_E fill:#f1f5f9,stroke:#475569,stroke-width:2px;
+    style PLANE_F fill:#fdf2f8,stroke:#be185d,stroke-width:2px;
+
+    %% 子 subgraph 浅色
+    style RUNTIME fill:#ffffff,stroke:#94a3b8;
+    style INGRESS fill:#ffffff,stroke:#bfdbfe;
+    style MIDDLEWARE fill:#ffffff,stroke:#bfdbfe;
+    style GROUPING fill:#ffffff,stroke:#bfdbfe;
+    style USER_AUTH fill:#ffffff,stroke:#bfdbfe;
+    style STREAM_POLICY fill:#ffffff,stroke:#fcd34d;
+    style MODERATION fill:#ffffff,stroke:#fcd34d;
+    style STICKY fill:#ffffff,stroke:#fcd34d;
+    style LOAD fill:#ffffff,stroke:#fcd34d;
+    style SELECT fill:#fffdf7,stroke:#fcd34d;
+    style FORWARD fill:#ffffff,stroke:#fcd34d;
+    style PROTOCOLS fill:#ffffff,stroke:#fcd34d;
+    style OPENAI_SCHED fill:#ffffff,stroke:#fcd34d;
+    style ERROR_SEMANTICS fill:#ffffff,stroke:#d8b4fe;
+    style LIMITS_STATE fill:#ffffff,stroke:#d8b4fe;
+    style TOKEN_OAUTH fill:#ffffff,stroke:#d8b4fe;
+    style HEAL fill:#ffffff,stroke:#d8b4fe;
+    style BILLING fill:#ffffff,stroke:#86efac;
+    style PAYMENT_DOMAIN fill:#ffffff,stroke:#86efac;
+    style CHANNELS fill:#ffffff,stroke:#86efac;
+    style MGMT fill:#ffffff,stroke:#cbd5e1;
+    style ROUTER_SURFACE fill:#ffffff,stroke:#cbd5e1;
+    style ACCOUNT_LIFE fill:#ffffff,stroke:#cbd5e1;
+    style OPS fill:#ffffff,stroke:#cbd5e1;
+    style DATA_SYSTEM fill:#ffffff,stroke:#cbd5e1;
+    style MODEL_POLICY fill:#ffffff,stroke:#fbcfe8;
+    style TROUBLESHOOT fill:#ffffff,stroke:#fbcfe8;
+    style STABILITY_INVARIANTS fill:#ffffff,stroke:#fbcfe8;
