@@ -1,20 +1,41 @@
 # =============================================================================
 # Sub2API Multi-Stage Dockerfile
 # =============================================================================
-# Stage 1: Build frontend
-# Stage 2: Build Go backend with embedded frontend
-# Stage 3: Final minimal image
+# Stage 1: MCP admin service image
+# Stage 2: Build frontend
+# Stage 3: Build Go backend with embedded frontend
+# Stage 4: PostgreSQL client tools
+# Stage 5: Shared runtime base
+# Stage 6: GoReleaser prebuilt-binary image
+# Stage 7: Final source-built image (default)
 # =============================================================================
 
 ARG NODE_IMAGE=node:24-alpine
 ARG GOLANG_IMAGE=golang:1.26.3-alpine
 ARG ALPINE_IMAGE=alpine:3.21
 ARG POSTGRES_IMAGE=postgres:18-alpine
+ARG PYTHON_IMAGE=python:3.12-slim
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 
 # -----------------------------------------------------------------------------
-# Stage 1: Frontend Builder
+# Stage 1: MCP Admin Service Image
+# -----------------------------------------------------------------------------
+FROM ${PYTHON_IMAGE} AS mcp
+
+WORKDIR /app
+
+COPY mcp/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY mcp/sub2api-admin-mcp.py .
+
+EXPOSE 8765
+
+CMD ["python", "sub2api-admin-mcp.py"]
+
+# -----------------------------------------------------------------------------
+# Stage 2: Frontend Builder
 # -----------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS frontend-builder
 
@@ -32,13 +53,14 @@ COPY frontend/ ./
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Backend Builder
+# Stage 3: Backend Builder
 # -----------------------------------------------------------------------------
 FROM ${GOLANG_IMAGE} AS backend-builder
 
 # Build arguments for version info (set by CI)
 ARG VERSION=
-ARG COMMIT=docker
+ARG COMMIT=
+ARG SOURCE_COMMIT=
 ARG DATE
 ARG GOPROXY
 ARG GOSUMDB
@@ -65,23 +87,24 @@ COPY --from=frontend-builder /app/backend/internal/web/dist ./internal/web/dist
 # Version precedence: build arg VERSION > cmd/server/VERSION
 RUN VERSION_VALUE="${VERSION}" && \
     if [ -z "${VERSION_VALUE}" ]; then VERSION_VALUE="$(tr -d '\r\n' < ./cmd/server/VERSION)"; fi && \
+    COMMIT_VALUE="${COMMIT:-${SOURCE_COMMIT:-docker}}" && \
     DATE_VALUE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
     CGO_ENABLED=0 GOOS=linux go build \
     -tags embed \
-    -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
+    -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT_VALUE} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
     -trimpath \
     -o /app/sub2api \
     ./cmd/server
 
 # -----------------------------------------------------------------------------
-# Stage 3: PostgreSQL Client (version-matched with docker-compose)
+# Stage 4: PostgreSQL Client (version-matched with docker-compose)
 # -----------------------------------------------------------------------------
 FROM ${POSTGRES_IMAGE} AS pg-client
 
 # -----------------------------------------------------------------------------
-# Stage 4: Final Runtime Image
+# Stage 5: Shared Runtime Base
 # -----------------------------------------------------------------------------
-FROM ${ALPINE_IMAGE}
+FROM ${ALPINE_IMAGE} AS runtime-base
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
@@ -114,10 +137,6 @@ RUN addgroup -g 1000 sub2api && \
 # Set working directory
 WORKDIR /app
 
-# Copy binary/resources with ownership to avoid extra full-layer chown copy
-COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
-COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
-
 # Create data directory
 RUN mkdir -p /app/data && chown sub2api:sub2api /app/data
 
@@ -135,3 +154,20 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # Run the application (entrypoint fixes /app/data ownership then execs as sub2api)
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["/app/sub2api"]
+
+# -----------------------------------------------------------------------------
+# Stage 6: GoReleaser Runtime Image (prebuilt binary)
+# -----------------------------------------------------------------------------
+FROM runtime-base AS goreleaser
+
+COPY --chown=sub2api:sub2api sub2api /app/sub2api
+COPY --chown=sub2api:sub2api backend/resources /app/resources
+
+# -----------------------------------------------------------------------------
+# Stage 7: Final Runtime Image (default source build)
+# -----------------------------------------------------------------------------
+FROM runtime-base AS final
+
+# Copy binary/resources with ownership to avoid extra full-layer chown copy
+COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
+COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources

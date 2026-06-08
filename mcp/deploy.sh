@@ -5,6 +5,7 @@ CONTAINER_NAME="sub2api-admin-mcp"
 IMAGE_NAME="sub2api-admin-mcp:latest"
 NETWORK="sub2api-network"
 MCP_DIR="/srv/sub2api/mcp"
+REPO_ROOT="${REPO_ROOT:-$(cd "$MCP_DIR/.." && pwd)}"
 ENV_FILE="${MCP_ENV_FILE:-$MCP_DIR/.env}"
 STATE_FILE="${PATROL_STATE_FILE_HOST:-$MCP_DIR/patrol_state.json}"
 
@@ -29,7 +30,7 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 echo "Building image..."
-sudo docker build -t "$IMAGE_NAME" "$MCP_DIR"
+sudo docker build -t "$IMAGE_NAME" -f "$REPO_ROOT/Dockerfile" --target mcp "$REPO_ROOT"
 
 echo "Stopping existing container (if any)..."
 sudo docker rm -f "$CONTAINER_NAME" 2>/dev/null || true

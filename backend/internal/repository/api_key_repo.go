@@ -441,7 +441,12 @@ func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyw
 		q = q.Where(apikey.NameContainsFold(keyword))
 	}
 
-	keys, err := q.Limit(limit).Order(dbent.Desc(apikey.FieldID)).All(ctx)
+	keys, err := q.
+		WithUser().
+		WithGroup().
+		Limit(limit).
+		Order(dbent.Desc(apikey.FieldID)).
+		All(ctx)
 	if err != nil {
 		return nil, err
 	}

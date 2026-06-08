@@ -146,6 +146,8 @@ func runMainServer() {
 	buildInfo := handler.BuildInfo{
 		Version:   Version,
 		BuildType: BuildType,
+		Commit:    Commit,
+		Date:      Date,
 	}
 
 	app, err := initializeApplication(buildInfo)

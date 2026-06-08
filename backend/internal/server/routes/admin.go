@@ -87,6 +87,9 @@ func RegisterAdminRoutes(
 		// API Key 管理
 		registerAdminAPIKeyRoutes(admin, h)
 
+		// 下游 Consumer Key 审计
+		registerConsumerKeyAuditRoutes(admin, h)
+
 		// 定时测试计划
 		registerScheduledTestRoutes(admin, h)
 
@@ -122,6 +125,14 @@ func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	apiKeys := admin.Group("/api-keys")
 	{
 		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
+	}
+}
+
+func registerConsumerKeyAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	consumerKeys := admin.Group("/consumer-keys")
+	{
+		consumerKeys.GET("", h.Admin.ConsumerKeyAudit.List)
+		consumerKeys.POST("/:id/test", h.Admin.ConsumerKeyAudit.Test)
 	}
 }
 

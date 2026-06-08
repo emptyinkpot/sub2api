@@ -61,11 +61,13 @@ dockers:
     skip_push: '{{ if eq .Env.DOCKERHUB_USERNAME "skip" }}true{{ else }}false{{ end }}'
     image_templates:
       - "{{ .Env.DOCKERHUB_USERNAME }}/sub2api:{{ .Version }}-amd64"
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_flag_templates:
+      - "--target=goreleaser"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"
@@ -76,11 +78,13 @@ dockers:
     skip_push: '{{ if eq .Env.DOCKERHUB_USERNAME "skip" }}true{{ else }}false{{ end }}'
     image_templates:
       - "{{ .Env.DOCKERHUB_USERNAME }}/sub2api:{{ .Version }}-arm64"
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_flag_templates:
+      - "--target=goreleaser"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"
@@ -91,11 +95,13 @@ dockers:
     goarch: amd64
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:{{ .Version }}-amd64"
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_flag_templates:
+      - "--target=goreleaser"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"
@@ -106,11 +112,13 @@ dockers:
     goarch: arm64
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:{{ .Version }}-arm64"
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_flag_templates:
+      - "--target=goreleaser"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"

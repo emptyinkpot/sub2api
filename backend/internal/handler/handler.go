@@ -29,6 +29,7 @@ type AdminHandlers struct {
 	ErrorPassthrough       *admin.ErrorPassthroughHandler
 	TLSFingerprintProfile  *admin.TLSFingerprintProfileHandler
 	APIKey                 *admin.AdminAPIKeyHandler
+	ConsumerKeyAudit       *admin.ConsumerKeyAuditHandler
 	ScheduledTest          *admin.ScheduledTestHandler
 	Channel                *admin.ChannelHandler
 	ChannelMonitor         *admin.ChannelMonitorHandler
@@ -62,4 +63,6 @@ type Handlers struct {
 type BuildInfo struct {
 	Version   string
 	BuildType string // "source" for manual builds, "release" for CI builds
+	Commit    string
+	Date      string
 }

@@ -17,7 +17,7 @@ ADMIN_EMAIL=""
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/smoke/smoke-test.sh [--quick|--full] [options]
+  scripts/check.sh --smoke [--quick|--full] [options]
 
 Modes:
   default     Health + public settings + auth/bootstrap + auth/me + provider catalog + model list + chat completion

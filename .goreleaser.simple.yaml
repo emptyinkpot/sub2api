@@ -45,11 +45,13 @@ dockers:
       - "ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:{{ .Version }}-amd64"
       - "ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:{{ .Version }}"
       - "ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:latest"
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - backend/resources
     build_flag_templates:
+      - "--target=goreleaser"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"

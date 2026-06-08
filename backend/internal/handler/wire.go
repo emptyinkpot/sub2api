@@ -32,6 +32,7 @@ func ProvideAdminHandlers(
 	errorPassthroughHandler *admin.ErrorPassthroughHandler,
 	tlsFingerprintProfileHandler *admin.TLSFingerprintProfileHandler,
 	apiKeyHandler *admin.AdminAPIKeyHandler,
+	consumerKeyAuditHandler *admin.ConsumerKeyAuditHandler,
 	scheduledTestHandler *admin.ScheduledTestHandler,
 	channelHandler *admin.ChannelHandler,
 	channelMonitorHandler *admin.ChannelMonitorHandler,
@@ -64,6 +65,7 @@ func ProvideAdminHandlers(
 		ErrorPassthrough:       errorPassthroughHandler,
 		TLSFingerprintProfile:  tlsFingerprintProfileHandler,
 		APIKey:                 apiKeyHandler,
+		ConsumerKeyAudit:       consumerKeyAuditHandler,
 		ScheduledTest:          scheduledTestHandler,
 		Channel:                channelHandler,
 		ChannelMonitor:         channelMonitorHandler,
@@ -74,9 +76,19 @@ func ProvideAdminHandlers(
 	}
 }
 
-// ProvideSystemHandler creates admin.SystemHandler with UpdateService
-func ProvideSystemHandler(updateService *service.UpdateService, lockService *service.SystemOperationLockService) *admin.SystemHandler {
-	return admin.NewSystemHandler(updateService, lockService)
+// ProvideSystemBuildInfo adapts application build metadata for admin system APIs.
+func ProvideSystemBuildInfo(buildInfo BuildInfo) admin.SystemBuildInfo {
+	return admin.SystemBuildInfo{
+		Version:   buildInfo.Version,
+		BuildType: buildInfo.BuildType,
+		Commit:    buildInfo.Commit,
+		Date:      buildInfo.Date,
+	}
+}
+
+// ProvideSystemHandler creates admin.SystemHandler with UpdateService.
+func ProvideSystemHandler(updateService *service.UpdateService, lockService *service.SystemOperationLockService, buildInfo admin.SystemBuildInfo) *admin.SystemHandler {
+	return admin.NewSystemHandler(updateService, lockService, buildInfo)
 }
 
 // ProvideSettingHandler creates SettingHandler with version from BuildInfo
@@ -170,6 +182,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewPromoHandler,
 	ProvideAdminSettingHandler,
 	admin.NewOpsHandler,
+	ProvideSystemBuildInfo,
 	ProvideSystemHandler,
 	admin.NewSubscriptionHandler,
 	admin.NewUsageHandler,
@@ -177,6 +190,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewErrorPassthroughHandler,
 	admin.NewTLSFingerprintProfileHandler,
 	admin.NewAdminAPIKeyHandler,
+	admin.NewConsumerKeyAuditHandler,
 	admin.NewScheduledTestHandler,
 	admin.NewChannelHandler,
 	admin.NewChannelMonitorHandler,

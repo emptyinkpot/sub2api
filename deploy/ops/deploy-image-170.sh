@@ -5,7 +5,7 @@ set -eu
 APP_ROOT="${APP_ROOT:-/srv/sub2api}"
 SOURCE_REF="${SOURCE_REF:-origin/integration/upstream-rebase}"
 IMAGE_TAG="${SUB2API_IMAGE:-sub2api:integration}"
-DOCKERFILE="${DOCKERFILE:-deploy/Dockerfile.backend-only}"
+DOCKERFILE="${DOCKERFILE:-Dockerfile}"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 GOSUMDB="${GOSUMDB:-sum.golang.google.cn}"
 CONTAINER_NAME="${CONTAINER_NAME:-sub2api}"
@@ -24,8 +24,7 @@ sudo docker build \
   -t "$IMAGE_TAG" \
   --build-arg GOPROXY="$GOPROXY" \
   --build-arg GOSUMDB="$GOSUMDB" \
-  --build-arg BUILD_COMMIT="$COMMIT" \
-  --build-arg BUILD_TYPE=release \
+  --build-arg COMMIT="$COMMIT" \
   .
 
 cd "$APP_ROOT/deploy"

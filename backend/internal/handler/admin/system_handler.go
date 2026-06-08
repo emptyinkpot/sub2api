@@ -20,6 +20,7 @@ import (
 type SystemHandler struct {
 	updateSvc systemUpdateService
 	lockSvc   *service.SystemOperationLockService
+	buildInfo SystemBuildInfo
 }
 
 type systemUpdateService interface {
@@ -28,11 +29,24 @@ type systemUpdateService interface {
 	Rollback() error
 }
 
+// SystemBuildInfo contains build-time metadata for deployment acceptance.
+type SystemBuildInfo struct {
+	Version   string
+	BuildType string
+	Commit    string
+	Date      string
+}
+
 // NewSystemHandler creates a new SystemHandler
-func NewSystemHandler(updateSvc systemUpdateService, lockSvc *service.SystemOperationLockService) *SystemHandler {
+func NewSystemHandler(updateSvc systemUpdateService, lockSvc *service.SystemOperationLockService, buildInfos ...SystemBuildInfo) *SystemHandler {
+	var buildInfo SystemBuildInfo
+	if len(buildInfos) > 0 {
+		buildInfo = buildInfos[0]
+	}
 	return &SystemHandler{
 		updateSvc: updateSvc,
 		lockSvc:   lockSvc,
+		buildInfo: buildInfo,
 	}
 }
 
@@ -40,8 +54,21 @@ func NewSystemHandler(updateSvc systemUpdateService, lockSvc *service.SystemOper
 // GET /api/v1/admin/system/version
 func (h *SystemHandler) GetVersion(c *gin.Context) {
 	info, _ := h.updateSvc.CheckUpdate(c.Request.Context(), false)
+	version := h.buildInfo.Version
+	buildType := h.buildInfo.BuildType
+	if info != nil {
+		if info.CurrentVersion != "" {
+			version = info.CurrentVersion
+		}
+		if info.BuildType != "" {
+			buildType = info.BuildType
+		}
+	}
 	response.Success(c, gin.H{
-		"version": info.CurrentVersion,
+		"version":    version,
+		"build_type": buildType,
+		"commit":     h.buildInfo.Commit,
+		"date":       h.buildInfo.Date,
 	})
 }
 
