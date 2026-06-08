@@ -12,6 +12,7 @@ CHAT_BASE_URL="${SUB2API_CHAT_BASE_URL:-}"
 INCLUDE_UNUSABLE=0
 INCLUDE_IMAGE=0
 MODEL_FILTER=""
+SLEEP_MS="${SUB2API_AUDIT_SLEEP_MS:-500}"
 
 usage() {
   cat <<'EOF'
@@ -31,12 +32,14 @@ Options:
   --model-filter TEXT  Only audit models containing this substring
   --include-image      Also run real image-generation probes for OpenAI image models
   --include-unusable   Also audit keys marked unusable by metadata
+  --sleep-ms N         Milliseconds to wait between real model probes, default 500
   --timeout SEC        Per-request timeout
   -h, --help           Show this help
 
 Environment:
   SUB2API_APP_BASE_URL, SUB2API_AUDIT_BASE_URL, SUB2API_AUDIT_TIMEOUT,
-  SUB2API_AUDIT_KEY_LIMIT, SUB2API_AUDIT_KEY_STATUS, SUB2API_CHAT_BASE_URL
+  SUB2API_AUDIT_KEY_LIMIT, SUB2API_AUDIT_KEY_STATUS, SUB2API_CHAT_BASE_URL,
+  SUB2API_AUDIT_SLEEP_MS
 EOF
 }
 
@@ -74,6 +77,10 @@ while [ "$#" -gt 0 ]; do
       INCLUDE_UNUSABLE=1
       shift
       ;;
+    --sleep-ms)
+      SLEEP_MS="${2:?--sleep-ms requires a value}"
+      shift 2
+      ;;
     --timeout)
       TIMEOUT="${2:?--timeout requires a value}"
       shift 2
@@ -90,10 +97,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if ! [[ "$SLEEP_MS" =~ ^[0-9]+$ ]]; then
+  echo "--sleep-ms must be a non-negative integer" >&2
+  exit 2
+fi
+
 audit_init_base_url
 audit_require_tools
 
-printf 'Sub2API model audit app=%s limit=%s include_image=%s timeout=%ss\n' "$APP_BASE_URL" "$LIMIT" "$(json_bool "$INCLUDE_IMAGE")" "$TIMEOUT"
+printf 'Sub2API model audit app=%s limit=%s include_image=%s timeout=%ss sleep_ms=%s\n' "$APP_BASE_URL" "$LIMIT" "$(json_bool "$INCLUDE_IMAGE")" "$TIMEOUT" "$SLEEP_MS"
 audit_warn "This audit performs real gateway requests for every audited model and may consume quota/usage."
 if [ "$INCLUDE_IMAGE" -eq 0 ]; then
   audit_warn "Image models are classified and skipped by default; pass --include-image to generate real images."
@@ -147,6 +159,15 @@ classify_model_capability() {
   fi
 
   printf 'chat'
+}
+
+sleep_between_model_probes() {
+  if [ "$SLEEP_MS" -le 0 ]; then
+    return
+  fi
+  local seconds
+  printf -v seconds '%d.%03d' "$((SLEEP_MS / 1000))" "$((SLEEP_MS % 1000))"
+  sleep "$seconds"
 }
 
 key_count=0
@@ -256,6 +277,7 @@ while IFS= read -r item; do
       audit_fail "$model_label $result"
       fail_count=$((fail_count + 1))
     fi
+    sleep_between_model_probes
   done < <(printf '%s' "$list_result" | jq -r '.data.models[]')
 done < <(printf '%s' "$json" | jq -c '.data.items[]')
 
