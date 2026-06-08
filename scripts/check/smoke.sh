@@ -5,6 +5,11 @@ MODE="standard"
 TIMEOUT="${SUB2API_SMOKE_TIMEOUT:-45}"
 APP_BASE_URL="${SUB2API_APP_BASE_URL:-}"
 CHAT_BASE_URL="${SUB2API_CHAT_BASE_URL:-${SUB2API_BASE_URL:-}}"
+CHAT_BASE_URL_EXPLICIT=0
+if [ -n "${SUB2API_CHAT_BASE_URL:-}" ] || [ -n "${SUB2API_BASE_URL:-}" ]; then
+  CHAT_BASE_URL_EXPLICIT=1
+fi
+HTTP_HOST="${SUB2API_HTTP_HOST:-}"
 API_KEY="${SUB2API_CLIENT_KEY:-}"
 DEFAULT_MODEL="${SUB2API_MODEL:-claude-sonnet-4-6}"
 MODEL_SET=0
@@ -12,7 +17,7 @@ if [ -n "${SUB2API_MODEL:-}" ]; then
   MODEL_SET=1
 fi
 SECRET_DIR="${SUB2API_CONSUMER_SECRET_DIR:-}"
-NO_SECRET_DISCOVERY=0
+NO_SECRET_DISCOVERY="${SUB2API_NO_SECRET_DISCOVERY:-0}"
 SERVER_SIDE_KEY_AUDIT=1
 SKIP_STREAM=0
 
@@ -64,6 +69,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --chat-base-url)
       CHAT_BASE_URL="${2:?--chat-base-url requires a value}"
+      CHAT_BASE_URL_EXPLICIT=1
       shift 2
       ;;
     --api-key)
@@ -184,6 +190,9 @@ curl_body() {
 
   tmp="$(mktemp)"
   local args=(-sS --max-time "$TIMEOUT" -o "$tmp" -w '%{http_code}' -X "$method" -H "Accept: $accept")
+  if [ -n "$HTTP_HOST" ]; then
+    args+=(-H "Host: $HTTP_HOST")
+  fi
   if [ -n "$token" ]; then
     args+=(-H "Authorization: Bearer $token")
   fi
@@ -436,7 +445,7 @@ step_gateway_server_side() {
     fail "downstream-key" "no candidate key found; set SUB2API_CLIENT_KEY or --secret-dir"
   fi
 
-  local json total errors item id name masked status usable reason group platform label body result selected model_count summary
+  local json total errors item id name masked status usable reason group platform label body result selected model_count summary audit_chat_base_url
   json="$(curl_body GET "$APP_BASE_URL/api/v1/admin/consumer-keys?limit=200" "$ADMIN_TOKEN")" || fail "consumer-keys/list" "$json"
   assert_jq "consumer-keys/list" "$json" '.code == 0 and (.data.items | type == "array")'
   total="$(printf '%s' "$json" | jq -r '.data.items | length')"
@@ -461,10 +470,15 @@ step_gateway_server_side() {
       continue
     fi
 
+    audit_chat_base_url=""
+    if [ "$CHAT_BASE_URL_EXPLICIT" -eq 1 ]; then
+      audit_chat_base_url="$CHAT_BASE_URL"
+    fi
+
     body="$(
       jq -n \
         --arg model "$([ "$MODEL_SET" -eq 1 ] && printf '%s' "$DEFAULT_MODEL" || true)" \
-        --arg chat_base_url "$CHAT_BASE_URL" \
+        --arg chat_base_url "$audit_chat_base_url" \
         --argjson timeout_sec "$TIMEOUT" \
         '{
           model: $model,

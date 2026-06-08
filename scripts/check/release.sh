@@ -112,6 +112,9 @@ curl_json() {
 
   tmp="$(mktemp)"
   local args=(-sS --max-time "$TIMEOUT" -o "$tmp" -w '%{http_code}' -X "$method" -H "Accept: application/json")
+  if [ -n "${HTTP_HOST:-}" ]; then
+    args+=(-H "Host: $HTTP_HOST")
+  fi
   if [ -n "$token" ]; then
     args+=(-H "Authorization: Bearer $token")
   fi
@@ -270,7 +273,11 @@ wait_local_health() {
   local elapsed=0
   local health
   while [ "$elapsed" -le "$WAIT_TIMEOUT" ]; do
-    if health="$(curl -fsS --max-time "$TIMEOUT" "$base_url/health" 2>/dev/null)" &&
+    local args=(-fsS --max-time "$TIMEOUT")
+    if [ -n "${HTTP_HOST:-}" ]; then
+      args+=(-H "Host: $HTTP_HOST")
+    fi
+    if health="$(curl "${args[@]}" "$base_url/health" 2>/dev/null)" &&
       printf '%s' "$health" | jq -e '.status == "ok"' >/dev/null 2>&1; then
       printf '[PASS] release/candidate-health target=%s\n' "$base_url"
       return 0
@@ -288,7 +295,7 @@ run_coolify_image_acceptance() {
     exit 2
   fi
 
-  local env_file image source_commit remote_port local_port candidate_url
+  local env_file image source_commit remote_port local_port candidate_url internal_http_host
   env_file="$(resolve_remote_env_file)"
   image="$IMAGE"
   if [ -z "$image" ]; then
@@ -314,6 +321,8 @@ run_coolify_image_acceptance() {
   ssh -N -L "127.0.0.1:${local_port}:127.0.0.1:${remote_port}" "$REMOTE_HOST" &
   TUNNEL_PID="$!"
   candidate_url="http://127.0.0.1:${local_port}"
+  internal_http_host="${REMOTE_CONTAINER}:8080"
+  HTTP_HOST="$internal_http_host"
   if ! wait_local_health "$candidate_url"; then
     echo "Candidate image did not become healthy: $candidate_url/health" >&2
     exit 1
@@ -326,7 +335,7 @@ run_coolify_image_acceptance() {
     echo "candidate image commit did not match expected SOURCE_COMMIT=$source_commit" >&2
     exit 1
   }
-  "${BASH:-bash}" "$CHECK_ENTRY" "$CHECK_MODE" --base-url "$candidate_url" --timeout "$TIMEOUT" "${CHECK_ARGS[@]}"
+  SUB2API_HTTP_HOST="$internal_http_host" SUB2API_NO_SECRET_DISCOVERY=1 "${BASH:-bash}" "$CHECK_ENTRY" "$CHECK_MODE" --base-url "$candidate_url" --timeout "$TIMEOUT" "${CHECK_ARGS[@]}"
   printf 'RELEASE ACCEPTANCE PASSED image=%s commit=%s mode=%s\n' "$image" "$source_commit" "$CHECK_MODE"
 }
 

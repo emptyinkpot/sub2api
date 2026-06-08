@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 APP_BASE_URL="${SUB2API_APP_BASE_URL:-${SUB2API_AUDIT_BASE_URL:-}}"
 TIMEOUT="${SUB2API_AUDIT_TIMEOUT:-45}"
+HTTP_HOST="${SUB2API_HTTP_HOST:-}"
 ADMIN_TOKEN=""
 
 trim_slash() {
@@ -72,6 +73,9 @@ curl_body() {
 
   tmp="$(mktemp)"
   local args=(-sS --max-time "$TIMEOUT" -o "$tmp" -w '%{http_code}' -X "$method" -H "Accept: $accept")
+  if [ -n "$HTTP_HOST" ]; then
+    args+=(-H "Host: $HTTP_HOST")
+  fi
   if [ -n "$token" ]; then
     args+=(-H "Authorization: Bearer $token")
   fi
