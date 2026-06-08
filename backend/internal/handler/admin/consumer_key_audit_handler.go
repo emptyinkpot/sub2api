@@ -25,6 +25,7 @@ const (
 	consumerKeyAuditDefaultSecs  = 45
 	consumerKeyAuditMaxSecs      = 180
 	consumerKeyAuditBodyLimit    = 1 << 16
+	consumerKeyAuditMaxChatTries = 5
 )
 
 // ConsumerKeyAuditHandler exposes admin-only downstream key audit endpoints.
@@ -203,12 +204,6 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 	result.ModelCount = len(models)
 	result.Models = capConsumerKeyAuditModels(models, 50)
 
-	selectedModel := strings.TrimSpace(req.Model)
-	if selectedModel == "" && len(models) > 0 {
-		selectedModel = models[0]
-	}
-	result.SelectedModel = selectedModel
-
 	if req.ModelsOnly {
 		result.Success = len(models) > 0
 		if !result.Success {
@@ -218,7 +213,8 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 		return result
 	}
 
-	if selectedModel == "" {
+	candidateModels := consumerKeyAuditCandidateModels(req.Model, models)
+	if len(candidateModels) == 0 {
 		result.ModelList.Success = false
 		result.ModelList.Error = "model list returned no usable model ids"
 		return result
@@ -228,27 +224,33 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 	if prompt == "" {
 		prompt = "Reply with a short confirmation that sub2api consumer key audit is OK."
 	}
-	chatBody, _ := json.Marshal(gin.H{
-		"model":       selectedModel,
-		"messages":    []gin.H{{"role": "user", "content": prompt}},
-		"temperature": 0,
-		"max_tokens":  32,
-		"stream":      false,
-	})
+	for _, model := range candidateModels {
+		chatBody, _ := json.Marshal(gin.H{
+			"model":       model,
+			"messages":    []gin.H{{"role": "user", "content": prompt}},
+			"temperature": 0,
+			"max_tokens":  32,
+			"stream":      false,
+		})
 
-	chatProbe := h.gatewayRequest(ctx, http.MethodPost, chatBaseURL+"/chat/completions", apiKey.Key, chatBody, "application/json")
-	chatResult := chatProbe.result
-	if chatResult.Success {
-		content := extractConsumerKeyAuditChatContent(chatProbe.body)
-		if strings.TrimSpace(content) == "" {
-			chatResult.Success = false
-			chatResult.Error = "chat completion returned no assistant content"
-		} else {
-			chatResult.ContentPreview = truncateConsumerKeyAuditText(content, 160)
+		chatProbe := h.gatewayRequest(ctx, http.MethodPost, chatBaseURL+"/chat/completions", apiKey.Key, chatBody, "application/json")
+		chatResult := chatProbe.result
+		if chatResult.Success {
+			content := extractConsumerKeyAuditChatContent(chatProbe.body)
+			if strings.TrimSpace(content) == "" {
+				chatResult.Success = false
+				chatResult.Error = "chat completion returned no assistant content"
+			} else {
+				chatResult.ContentPreview = truncateConsumerKeyAuditText(content, 160)
+			}
+		}
+		result.SelectedModel = model
+		result.Chat = &chatResult
+		if chatResult.Success {
+			result.Success = result.ModelList.Success
+			return result
 		}
 	}
-	result.Chat = &chatResult
-	result.Success = result.ModelList.Success && chatResult.Success
 	return result
 }
 
@@ -507,6 +509,14 @@ func capConsumerKeyAuditModels(models []string, limit int) []string {
 	out := make([]string, limit)
 	copy(out, models[:limit])
 	return out
+}
+
+func consumerKeyAuditCandidateModels(requestedModel string, models []string) []string {
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel != "" {
+		return []string{requestedModel}
+	}
+	return capConsumerKeyAuditModels(models, consumerKeyAuditMaxChatTries)
 }
 
 func extractConsumerKeyAuditChatContent(body []byte) string {
