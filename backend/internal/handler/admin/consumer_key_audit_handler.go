@@ -20,12 +20,13 @@ import (
 )
 
 const (
-	consumerKeyAuditDefaultLimit = 200
-	consumerKeyAuditMaxLimit     = 1000
-	consumerKeyAuditDefaultSecs  = 45
-	consumerKeyAuditMaxSecs      = 180
-	consumerKeyAuditBodyLimit    = 1 << 16
-	consumerKeyAuditMaxChatTries = 5
+	consumerKeyAuditDefaultLimit          = 200
+	consumerKeyAuditMaxLimit              = 1000
+	consumerKeyAuditDefaultSecs           = 45
+	consumerKeyAuditMaxSecs               = 180
+	consumerKeyAuditBodyLimit             = 1 << 16
+	consumerKeyAuditMaxChatTries          = 5
+	consumerKeyAuditDefaultModelListLimit = 50
 )
 
 const (
@@ -76,12 +77,13 @@ type ConsumerKeyAuditItem struct {
 }
 
 type ConsumerKeyAuditTestRequest struct {
-	Model       string `json:"model"`
-	Prompt      string `json:"prompt"`
-	Capability  string `json:"capability"`
-	ModelsOnly  bool   `json:"models_only"`
-	ChatBaseURL string `json:"chat_base_url"`
-	TimeoutSec  int    `json:"timeout_sec"`
+	Model            string `json:"model"`
+	Prompt           string `json:"prompt"`
+	Capability       string `json:"capability"`
+	ModelsOnly       bool   `json:"models_only"`
+	IncludeAllModels bool   `json:"include_all_models"`
+	ChatBaseURL      string `json:"chat_base_url"`
+	TimeoutSec       int    `json:"timeout_sec"`
 }
 
 type ConsumerKeyAuditProbe struct {
@@ -215,7 +217,10 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 
 	models := extractConsumerKeyAuditModelIDs(modelProbe.body)
 	result.ModelCount = len(models)
-	result.Models = capConsumerKeyAuditModels(models, 50)
+	result.Models = capConsumerKeyAuditModels(models, consumerKeyAuditDefaultModelListLimit)
+	if req.IncludeAllModels {
+		result.Models = models
+	}
 
 	if req.ModelsOnly {
 		result.Success = len(models) > 0

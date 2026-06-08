@@ -11,6 +11,57 @@ GOSUMDB="${GOSUMDB:-sum.golang.google.cn}"
 CONTAINER_NAME="${CONTAINER_NAME:-sub2api}"
 NETWORK_NAME="${SUB2API_NETWORK:-sub2api-network}"
 DATA_DIR="${SUB2API_DATA_DIR:-$APP_ROOT/deploy/data}"
+NGINX_SITE="${SUB2API_NGINX_SITE:-/etc/nginx/sites-enabled/sub2api.tengokukk.com}"
+NGINX_SNIPPET_SRC="${SUB2API_NGINX_SNIPPET_SRC:-$APP_ROOT/deploy/ops/nginx/sub2api-gateway-locations.conf}"
+NGINX_SNIPPET_DST="${SUB2API_NGINX_SNIPPET_DST:-/etc/nginx/snippets/sub2api-gateway-locations.conf}"
+
+sync_nginx_gateway_routes() {
+  if [ ! -f "$NGINX_SNIPPET_SRC" ]; then
+    echo "Missing nginx gateway snippet: $NGINX_SNIPPET_SRC" >&2
+    exit 2
+  fi
+  if ! sudo test -f "$NGINX_SITE"; then
+    echo "Missing nginx site config: $NGINX_SITE" >&2
+    exit 2
+  fi
+
+  sudo install -d -m 0755 "$(dirname "$NGINX_SNIPPET_DST")"
+  sudo install -m 0644 "$NGINX_SNIPPET_SRC" "$NGINX_SNIPPET_DST"
+
+  if ! sudo grep -Fq "include $NGINX_SNIPPET_DST;" "$NGINX_SITE"; then
+    TMP_NGINX_SITE="$(mktemp)"
+    NGINX_BACKUP="$NGINX_SITE.bak.$(date -u +%Y%m%d%H%M%S)"
+    if ! sudo awk -v inc="    include $NGINX_SNIPPET_DST;" '
+      BEGIN { inserted = 0 }
+      /^[[:space:]]*location[[:space:]]+\/[[:space:]]*\{/ && inserted == 0 {
+        print inc
+        print ""
+        inserted = 1
+      }
+      { print }
+      END { if (inserted == 0) exit 10 }
+    ' "$NGINX_SITE" > "$TMP_NGINX_SITE"; then
+      rm -f "$TMP_NGINX_SITE"
+      echo "Could not insert nginx gateway snippet into $NGINX_SITE" >&2
+      exit 2
+    fi
+
+    sudo cp "$NGINX_SITE" "$NGINX_BACKUP"
+    sudo install -m 0644 "$TMP_NGINX_SITE" "$NGINX_SITE"
+    rm -f "$TMP_NGINX_SITE"
+
+    if ! sudo nginx -t; then
+      sudo cp "$NGINX_BACKUP" "$NGINX_SITE"
+      sudo nginx -t >/dev/null 2>&1 || true
+      echo "nginx validation failed; restored $NGINX_BACKUP" >&2
+      exit 1
+    fi
+  else
+    sudo nginx -t
+  fi
+
+  sudo systemctl reload nginx
+}
 
 cd "$APP_ROOT"
 
@@ -18,6 +69,7 @@ git fetch origin
 git checkout -B integration/upstream-rebase "$SOURCE_REF"
 
 COMMIT="$(git rev-parse --short HEAD)"
+sync_nginx_gateway_routes
 
 sudo docker build \
   --target app \

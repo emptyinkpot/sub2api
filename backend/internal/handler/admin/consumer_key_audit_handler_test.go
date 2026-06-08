@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -169,6 +170,43 @@ func TestConsumerKeyAuditGeminiImageCapabilityUsesV1BetaStreamEndpoint(t *testin
 	require.NotNil(t, result.Image)
 	require.True(t, result.Image.Success)
 	require.Nil(t, result.Chat)
+}
+
+func TestConsumerKeyAuditCanReturnAllModelsForModelAudit(t *testing.T) {
+	models := make([]map[string]string, 0, consumerKeyAuditDefaultModelListLimit+5)
+	for i := 0; i < consumerKeyAuditDefaultModelListLimit+5; i++ {
+		models = append(models, map[string]string{"id": "model-" + strconv.Itoa(i)})
+	}
+	modelBody, err := json.Marshal(map[string]any{"data": models})
+	require.NoError(t, err)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(modelBody)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := &ConsumerKeyAuditHandler{httpClient: upstream.Client()}
+
+	defaultResult := handler.testConsumerKey(context.Background(), activeConsumerKey(), upstream.URL+"/v1", ConsumerKeyAuditTestRequest{
+		ModelsOnly: true,
+	})
+	require.True(t, defaultResult.Success)
+	require.Equal(t, consumerKeyAuditDefaultModelListLimit+5, defaultResult.ModelCount)
+	require.Len(t, defaultResult.Models, consumerKeyAuditDefaultModelListLimit)
+
+	fullResult := handler.testConsumerKey(context.Background(), activeConsumerKey(), upstream.URL+"/v1", ConsumerKeyAuditTestRequest{
+		ModelsOnly:       true,
+		IncludeAllModels: true,
+	})
+	require.True(t, fullResult.Success)
+	require.Equal(t, consumerKeyAuditDefaultModelListLimit+5, fullResult.ModelCount)
+	require.Len(t, fullResult.Models, consumerKeyAuditDefaultModelListLimit+5)
 }
 
 func TestConsumerKeyAuditRejectsUnsupportedCapability(t *testing.T) {

@@ -200,6 +200,7 @@ while IFS= read -r item; do
       --argjson timeout_sec "$TIMEOUT" \
       '{
         models_only: true,
+        include_all_models: true,
         chat_base_url: $chat_base_url,
         timeout_sec: $timeout_sec
       } | with_entries(select(.value != ""))'

@@ -8,6 +8,7 @@ This document is a compact contract map for consumers and automation. It is not 
 | --- | --- |
 | Public UI/API | `https://sub2api.tengokukk.com/` |
 | OpenAI-compatible gateway | `https://sub2api.tengokukk.com/v1` |
+| Gemini-native gateway | `https://sub2api.tengokukk.com/v1beta` |
 | Admin/User API prefix | `https://sub2api.tengokukk.com/api/v1` |
 | Internal app target | `http://127.0.0.1:8080` |
 
@@ -43,6 +44,15 @@ OpenAI-compatible endpoints currently documented for consumers:
 | `POST` | `/v1/embeddings` | Hosted embeddings for vector retrieval |
 | `POST` | `/v1/images/generations` | Image generation compatibility |
 | `POST` | `/v1/images/edits` | Image edit compatibility |
+
+Gemini-native endpoints for Gemini SDK/CLI-compatible consumers:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/v1beta/models` | Gemini model list |
+| `GET` | `/v1beta/models/:model` | Gemini model metadata |
+| `POST` | `/v1beta/models/:model:generateContent` | Gemini content generation |
+| `POST` | `/v1beta/models/:model:streamGenerateContent` | Gemini streaming content generation |
 
 ## User API Key Management
 

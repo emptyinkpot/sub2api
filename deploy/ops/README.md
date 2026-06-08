@@ -9,6 +9,7 @@ Git 真源：**厂商目录 + 消费者 lane 声明**；密钥与线上 Postgres
 | `consumers/*.yaml` | 下游 lane（分组名、platform、key 名、默认模型） |
 | `bootstrap-contentmrs.mjs` | 幂等创建 ContentMRS 小说专用分组/账号/Key |
 | `deploy-image-170.sh` | 170 从 Git 母集构建 `sub2api:integration` 镜像并重启容器 |
+| `nginx/sub2api-gateway-locations.conf` | 170 公网 gateway 路由 snippet（无密钥，部署时 include 到站点配置） |
 | `../docs/runtime/provider-catalog.md` | 人类可读厂商表（与 `backend/internal/domain/provider_catalog.go` 对齐） |
 
 ## 部署规则
@@ -26,6 +27,10 @@ deploy/ops/deploy-image-170.sh
 会导出现有 `sub2api` 容器 env 并用 `docker run` 重建同名容器。
 运行容器应显示 `image=sub2api:integration`，代码只从镜像内 `/app/sub2api`
 执行；持久化数据只挂载 `/app/data`。
+
+脚本同时同步 server-170 的 nginx gateway snippet，确保公网 `/v1/`、
+`/v1beta/`、`/antigravity/v1/`、`/antigravity/v1beta/` 都反代到
+`127.0.0.1:8080`。站点配置里的 bootstrap secret 不进入 Git。
 
 ## 在 170 上执行（部署/轮换密钥后）
 
