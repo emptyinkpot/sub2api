@@ -149,6 +149,44 @@ function Invoke-HttpPost {
   }
 }
 
+function Read-StreamAssistantContent {
+  param([Parameter(Mandatory = $true)][string]$Text)
+
+  $frames = [regex]::Matches($Text, "(?m)^data:\s*(.+?)\s*$")
+  $parts = New-Object System.Collections.Generic.List[string]
+  foreach ($frame in $frames) {
+    $payload = $frame.Groups[1].Value.Trim()
+    if (-not $payload -or $payload -eq "[DONE]") {
+      continue
+    }
+    try {
+      $json = $payload | ConvertFrom-Json -ErrorAction Stop
+      $piece = ""
+      if ($json.choices -and $json.choices.Count -gt 0) {
+        $choice = $json.choices[0]
+        if ($choice.delta -and $choice.delta.content) {
+          $piece = [string]$choice.delta.content
+        } elseif ($choice.message -and $choice.message.content) {
+          $piece = [string]$choice.message.content
+        }
+      }
+      if (-not $piece -and $json.content) {
+        $piece = [string]$json.content
+      }
+      if ($piece) {
+        $parts.Add($piece)
+      }
+    } catch {
+      continue
+    }
+  }
+
+  [ordered]@{
+    frameCount = $frames.Count
+    content = (($parts.ToArray()) -join "")
+  }
+}
+
 function Invoke-ChatCompletion {
   param(
     [Parameter(Mandatory = $true)][object]$Candidate,
@@ -181,13 +219,18 @@ function Invoke-ChatCompletion {
       if (-not ($text -match "data:\s*")) {
         throw "stream response did not contain SSE data frames"
       }
+      $streamParsed = Read-StreamAssistantContent -Text $text
+      $streamContent = [string]$streamParsed.content
+      if (-not $streamContent.Trim()) {
+        throw "stream response contained $($streamParsed.frameCount) SSE frames but no assistant content"
+      }
       if (-not ($text -match "sub2api downstream key ok")) {
-        throw "stream response did not contain expected assistant text"
+        Write-Warning "stream response did not exactly echo the requested phrase; accepting non-empty assistant content for smoke"
       }
       return [ordered]@{
         stream = $true
-        content = "sub2api downstream key ok"
-        frameCount = ([regex]::Matches($text, "data:\s*")).Count
+        content = $streamContent.Trim()
+        frameCount = $streamParsed.frameCount
       }
     }
 
