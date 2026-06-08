@@ -1,13 +1,14 @@
 # =============================================================================
 # Sub2API Multi-Stage Dockerfile
 # =============================================================================
-# Stage 1: MCP admin service image
-# Stage 2: Build frontend
-# Stage 3: Build Go backend with embedded frontend
-# Stage 4: PostgreSQL client tools
-# Stage 5: Shared runtime base
-# Stage 6: GoReleaser prebuilt-binary image
-# Stage 7: Final source-built image (default)
+# Stage 1: Build frontend
+# Stage 2: Build Go backend with embedded frontend
+# Stage 3: PostgreSQL client tools
+# Stage 4: Shared runtime base
+# Stage 5: Source-built app image (server deploy target)
+# Stage 6: MCP admin service image (explicit target)
+# Stage 7: GoReleaser prebuilt-binary image (explicit target)
+# Stage 8: Default final app image alias
 # =============================================================================
 
 ARG NODE_IMAGE=node:24-alpine
@@ -19,23 +20,7 @@ ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 
 # -----------------------------------------------------------------------------
-# Stage 1: MCP Admin Service Image
-# -----------------------------------------------------------------------------
-FROM ${PYTHON_IMAGE} AS mcp
-
-WORKDIR /app
-
-COPY mcp/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY mcp/sub2api-admin-mcp.py .
-
-EXPOSE 8765
-
-CMD ["python", "sub2api-admin-mcp.py"]
-
-# -----------------------------------------------------------------------------
-# Stage 2: Frontend Builder
+# Stage 1: Frontend Builder
 # -----------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS frontend-builder
 
@@ -53,7 +38,7 @@ COPY frontend/ ./
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
-# Stage 3: Backend Builder
+# Stage 2: Backend Builder
 # -----------------------------------------------------------------------------
 FROM ${GOLANG_IMAGE} AS backend-builder
 
@@ -97,12 +82,12 @@ RUN VERSION_VALUE="${VERSION}" && \
     ./cmd/server
 
 # -----------------------------------------------------------------------------
-# Stage 4: PostgreSQL Client (version-matched with docker-compose)
+# Stage 3: PostgreSQL Client (version-matched with docker-compose)
 # -----------------------------------------------------------------------------
 FROM ${POSTGRES_IMAGE} AS pg-client
 
 # -----------------------------------------------------------------------------
-# Stage 5: Shared Runtime Base
+# Stage 4: Shared Runtime Base
 # -----------------------------------------------------------------------------
 FROM ${ALPINE_IMAGE} AS runtime-base
 
@@ -156,7 +141,32 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["/app/sub2api"]
 
 # -----------------------------------------------------------------------------
-# Stage 6: GoReleaser Runtime Image (prebuilt binary)
+# Stage 5: Source-Built App Runtime Image
+# -----------------------------------------------------------------------------
+FROM runtime-base AS app
+
+# Copy binary/resources with ownership to avoid extra full-layer chown copy
+COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
+COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
+
+# -----------------------------------------------------------------------------
+# Stage 6: MCP Admin Service Image
+# -----------------------------------------------------------------------------
+FROM ${PYTHON_IMAGE} AS mcp
+
+WORKDIR /app
+
+COPY mcp/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY mcp/sub2api-admin-mcp.py .
+
+EXPOSE 8765
+
+CMD ["python", "sub2api-admin-mcp.py"]
+
+# -----------------------------------------------------------------------------
+# Stage 7: GoReleaser Runtime Image (prebuilt binary)
 # -----------------------------------------------------------------------------
 FROM runtime-base AS goreleaser
 
@@ -164,10 +174,6 @@ COPY --chown=sub2api:sub2api sub2api /app/sub2api
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 
 # -----------------------------------------------------------------------------
-# Stage 7: Final Runtime Image (default source build)
+# Stage 8: Default Final Runtime Image
 # -----------------------------------------------------------------------------
-FROM runtime-base AS final
-
-# Copy binary/resources with ownership to avoid extra full-layer chown copy
-COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
-COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
+FROM app AS final

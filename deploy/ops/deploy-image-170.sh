@@ -20,6 +20,7 @@ git checkout -B integration/upstream-rebase "$SOURCE_REF"
 COMMIT="$(git rev-parse --short HEAD)"
 
 sudo docker build \
+  --target app \
   -f "$DOCKERFILE" \
   -t "$IMAGE_TAG" \
   --build-arg GOPROXY="$GOPROXY" \

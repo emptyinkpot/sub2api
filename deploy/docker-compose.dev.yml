@@ -13,6 +13,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      target: app
     container_name: sub2api-dev
     restart: unless-stopped
     ports:
