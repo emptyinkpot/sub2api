@@ -1,7 +1,7 @@
 %% sub2api 内部单图总览: 路由 + 鉴权 + 调度 + 转发 + 计费 + 支付 + OAuth/token + 监控 + 自愈 + 管理面
 %% 更新: 2026-06-03 +08 / TLS fingerprint 平台限制放开 + OpenAI passthrough DoWithTLS
 %% 证据: 运行容器日志、Postgres schema、Redis key、docker env、栈帧路径、backend/internal/server/routes 与 backend/internal/service 核心源码
-%% 运行面: server-170 / container=sub2api / port=8080 / health=200
+%% 运行面: Coolify-built Docker image / health=200; legacy server-170 runtime is evidence only
 %% 关键 env: GATEWAY_DISABLE_MODEL_MAPPING=true, GATEWAY_SCHEDULING_LOAD_BATCH_ENABLED=true,
 %%          GATEWAY_SCHEDULING_DB_FALLBACK_ENABLED=true, full_rebuild=300s, outbox_poll=1s
 %% model_mapping 已从 accounts.credentials 全量删除，并由 DB constraint 禁止回写

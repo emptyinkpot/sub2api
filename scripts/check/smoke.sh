@@ -7,8 +7,13 @@ APP_BASE_URL="${SUB2API_APP_BASE_URL:-}"
 CHAT_BASE_URL="${SUB2API_CHAT_BASE_URL:-${SUB2API_BASE_URL:-}}"
 API_KEY="${SUB2API_CLIENT_KEY:-}"
 DEFAULT_MODEL="${SUB2API_MODEL:-claude-sonnet-4-6}"
+MODEL_SET=0
+if [ -n "${SUB2API_MODEL:-}" ]; then
+  MODEL_SET=1
+fi
 SECRET_DIR="${SUB2API_CONSUMER_SECRET_DIR:-}"
 NO_SECRET_DISCOVERY=0
+SERVER_SIDE_KEY_AUDIT=1
 SKIP_STREAM=0
 
 ADMIN_TOKEN=""
@@ -31,6 +36,8 @@ Options:
   --model MODEL         Model for chat completion smoke
   --secret-dir DIR      Directory containing consumer *.env files
   --no-secret-discovery Do not discover keys from ~/.codex-secrets/sub2api/consumers
+  --no-server-side-key-audit
+                        Fail instead of using admin server-side key audit fallback
   --skip-stream         Skip stream check even in --full mode
   --timeout SEC         Per-request timeout
   -h, --help            Show this help
@@ -65,6 +72,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --model)
       DEFAULT_MODEL="${2:?--model requires a value}"
+      MODEL_SET=1
       shift 2
       ;;
     --secret-dir)
@@ -73,6 +81,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-secret-discovery)
       NO_SECRET_DISCOVERY=1
+      shift
+      ;;
+    --no-server-side-key-audit)
+      SERVER_SIDE_KEY_AUDIT=0
       shift
       ;;
     --skip-stream)
@@ -419,10 +431,75 @@ try_stream_completion() {
   fi
 }
 
+step_gateway_server_side() {
+  if [ "$SERVER_SIDE_KEY_AUDIT" -ne 1 ]; then
+    fail "downstream-key" "no candidate key found; set SUB2API_CLIENT_KEY or --secret-dir"
+  fi
+
+  local json total errors item id name masked status usable reason group platform label body result selected model_count summary
+  json="$(curl_body GET "$APP_BASE_URL/api/v1/admin/consumer-keys?limit=200" "$ADMIN_TOKEN")" || fail "consumer-keys/list" "$json"
+  assert_jq "consumer-keys/list" "$json" '.code == 0 and (.data.items | type == "array")'
+  total="$(printf '%s' "$json" | jq -r '.data.items | length')"
+  if [ "$total" -lt 1 ]; then
+    fail "downstream-key" "no downstream consumer keys found"
+  fi
+
+  errors=()
+  while IFS= read -r item; do
+    id="$(printf '%s' "$item" | jq -r '.id')"
+    name="$(printf '%s' "$item" | jq -r '.name // ""')"
+    masked="$(printf '%s' "$item" | jq -r '.masked_key // ""')"
+    status="$(printf '%s' "$item" | jq -r '.status // ""')"
+    usable="$(printf '%s' "$item" | jq -r '.usable // false')"
+    reason="$(printf '%s' "$item" | jq -r '.block_reason // ""')"
+    group="$(printf '%s' "$item" | jq -r '.group_name // ""')"
+    platform="$(printf '%s' "$item" | jq -r '.platform // ""')"
+    label="key#$id $masked name=$name status=$status group=$group platform=$platform"
+
+    if [ "$usable" != "true" ]; then
+      errors+=("$label skipped: ${reason:-unusable}")
+      continue
+    fi
+
+    body="$(
+      jq -n \
+        --arg model "$([ "$MODEL_SET" -eq 1 ] && printf '%s' "$DEFAULT_MODEL" || true)" \
+        --arg chat_base_url "$CHAT_BASE_URL" \
+        --argjson timeout_sec "$TIMEOUT" \
+        '{
+          model: $model,
+          chat_base_url: $chat_base_url,
+          timeout_sec: $timeout_sec
+        } | with_entries(select(.value != ""))'
+    )"
+
+    if result="$(curl_body POST "$APP_BASE_URL/api/v1/admin/consumer-keys/$id/test" "$ADMIN_TOKEN" "$body" 2>&1)"; then
+      if printf '%s' "$result" | jq -e '.code == 0 and .data.success == true' >/dev/null; then
+        selected="$(printf '%s' "$result" | jq -r '.data.selected_model // ""')"
+        model_count="$(printf '%s' "$result" | jq -r '.data.model_count // 0')"
+        pass "model-list (server-side $label models=$model_count)"
+        pass "chat completion (server-side $label selected_model=$selected)"
+        if [ "$MODE" = "full" ] && [ "$SKIP_STREAM" -eq 0 ]; then
+          printf '[SKIP] stream completion (server-side key audit keeps raw key hidden)\n'
+        fi
+        return 0
+      fi
+      summary="$(printf '%s' "$result" | jq -r '[.data.model_list.error, .data.chat.error] | map(select(. != null and . != "")) | join(" | ")' 2>/dev/null || true)"
+      errors+=("$label ${summary:-unexpected response $(truncate "$result")}")
+    else
+      errors+=("$label $result")
+    fi
+  done < <(printf '%s' "$json" | jq -c '.data.items[]')
+
+  printf '%s\n' "${errors[@]}" >&2
+  fail "gateway" "no downstream key passed server-side gateway smoke"
+}
+
 step_gateway() {
   discover_candidates
   if [ "${#CANDIDATES[@]}" -lt 1 ]; then
-    fail "downstream-key" "no candidate key found; set SUB2API_CLIENT_KEY or --secret-dir"
+    step_gateway_server_side
+    return
   fi
 
   local require_stream=0

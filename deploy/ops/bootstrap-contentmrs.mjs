@@ -5,8 +5,9 @@
  * - create user API key bound to novel group
  * - write ~/.codex-secrets/contentmrs/sub2api-novel.env (never commit)
  *
- * Requires SUB2API_ADMIN_EMAIL + SUB2API_ADMIN_PASSWORD in env or
- * reads /srv/sub2api/deploy/.env when run ON server-170 via ssh.
+ * Requires SUB2API_ADMIN_EMAIL + SUB2API_ADMIN_PASSWORD in env, or an explicit
+ * SUB2API_DEPLOY_ENV_FILE. The production deployment env is owned by Coolify;
+ * this helper must not assume a host-local source checkout.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -76,11 +77,13 @@ async function api(method, route, token, body) {
 }
 
 async function loginAdmin() {
-  const deployEnv = readEnvFile('/srv/sub2api/deploy/.env');
+  const deployEnv = process.env.SUB2API_DEPLOY_ENV_FILE
+    ? readEnvFile(process.env.SUB2API_DEPLOY_ENV_FILE)
+    : {};
   const email = String(process.env.SUB2API_ADMIN_EMAIL || deployEnv.ADMIN_EMAIL || '').trim();
   const password = String(process.env.SUB2API_ADMIN_PASSWORD || deployEnv.ADMIN_PASSWORD || '').trim();
   if (!email || !password) {
-    throw new Error('SUB2API admin credentials missing. Set SUB2API_ADMIN_PASSWORD or fix /srv/sub2api/deploy/.env ADMIN_PASSWORD');
+    throw new Error('SUB2API admin credentials missing. Set SUB2API_ADMIN_EMAIL + SUB2API_ADMIN_PASSWORD or provide SUB2API_DEPLOY_ENV_FILE.');
   }
   const result = await api('POST', '/auth/login', '', { email, password });
   const token = String(result?.access_token || result?.token || '').trim();

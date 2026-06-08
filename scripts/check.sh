@@ -33,7 +33,7 @@ usage() {
 '' \
 'Examples:' \
 '  scripts/check.sh' \
-'  scripts/check.sh --release --full' \
+'  scripts/check.sh --release --remote-host rainyun --coolify-resource-uuid <uuid> --full' \
 '  scripts/check.sh --smoke --full' \
 '  scripts/check.sh --audit-keys --models-only' \
 '  scripts/check.sh --audit-models --model-filter gpt-5' \
@@ -42,7 +42,7 @@ usage() {
 '  scripts/check.sh --full --base-url https://sub2api.tengokukk.com' \
 '' \
 'Notes:' \
-'  --release validates the Coolify-deployed server image over real HTTP.' \
+'  --release validates the Coolify-built server image; use --endpoint-only only for legacy diagnostics.' \
 '  --full at top level means "run every check module" and report aggregate failures.' \
 '  To run the full smoke profile only, use: scripts/check.sh --smoke --full' \
 '  Top-level --full accepts only options shared by every module: --base-url and --timeout.'

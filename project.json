@@ -1,0 +1,83 @@
+{
+  "name": "sub2api",
+  "projectName": "Sub2API",
+  "canonicalDoc": "README.md",
+  "machineReadableEntry": "project.json",
+  "githubRepo": "https://github.com/emptyinkpot/sub2api",
+  "upstreamRepo": "https://github.com/Wei-Shaw/sub2api",
+  "visibility": "private-fork",
+  "type": "project",
+  "owner": "emptyinkpot",
+  "canonicalPurpose": "AI API gateway for downstream keys, upstream provider accounts, model routing, billing, and admin operations.",
+  "readOrder": [
+    "README.md",
+    "project.json",
+    "scripts/check.sh",
+    "deploy/ops/README.md"
+  ],
+  "defaultBranch": "integration/upstream-rebase",
+  "localSourceRoot": "E:\\My Project\\sub2api",
+  "deliverySurface": {
+    "type": "github",
+    "repo": "emptyinkpot/sub2api",
+    "branch": "integration/upstream-rebase"
+  },
+  "productionDeployment": {
+    "authority": "Coolify",
+    "serverRuns": "finished Docker image",
+    "dockerfile": "Dockerfile",
+    "defaultTarget": "final",
+    "appTarget": "app",
+    "mcpTarget": "mcp",
+    "releaseTarget": "goreleaser",
+    "coolifyResourceUuid": null,
+    "remoteHost": null,
+    "runtimeRoot": "/data/coolify/applications/{coolifyResourceUuid}",
+    "envSource": "Coolify application .env"
+  },
+  "releaseAcceptance": {
+    "entrypoint": "scripts/check.sh",
+    "canonicalCommand": "scripts/check.sh --release --remote-host <host> --coolify-resource-uuid <uuid> --full",
+    "requiresFinishedImage": true,
+    "forbids": [
+      "source dev server",
+      "mock provider",
+      "dryRun",
+      "host-local checkout rebuild",
+      "manual /srv/sub2api deployment script"
+    ]
+  },
+  "configurationSurfaces": [
+    "Coolify application .env",
+    "deploy/.env.example",
+    "deploy/docker-compose*.yml"
+  ],
+  "secretSurfaces": [
+    "Coolify application .env",
+    "C:\\Users\\ASUS-KL\\.codex-secrets\\sub2api",
+    "C:\\Users\\ASUS-KL\\.codex-secrets\\coolify"
+  ],
+  "ownershipBoundary": {
+    "owns": [
+      "gateway HTTP runtime",
+      "downstream consumer key audit",
+      "upstream provider audit",
+      "routing audit",
+      "release acceptance for Sub2API images"
+    ],
+    "consumes": [
+      "Coolify build/deploy",
+      "PostgreSQL",
+      "Redis",
+      "upstream AI providers"
+    ],
+    "forbids": [
+      "treating deployment hosts as source of truth",
+      "manual deploy-image-170.sh path",
+      "plaintext secrets in repository files"
+    ]
+  },
+  "status": "coolify-migration-in-progress",
+  "publicBaseUrl": "https://sub2api.tengokukk.com",
+  "publicHealthPath": "/health"
+}

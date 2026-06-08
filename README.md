@@ -166,6 +166,33 @@ Nginx drops headers containing underscores by default (e.g. `session_id`), which
 
 ## Deployment
 
+### Production Canonical Path
+
+For this fork, production deployment is source-controlled through:
+
+```text
+E:\My Project\sub2api
+  -> https://github.com/emptyinkpot/sub2api
+  -> Coolify builds the root Dockerfile
+  -> server runs the finished Docker image
+```
+
+The source repository is canonical; deployment servers must not be treated as a
+second source checkout. Coolify owns production image build and runtime env
+injection. Do not qualify a release by running a source dev server, mock
+provider, dry run, or host-local rebuild script.
+
+Release acceptance is owned by the single check entrypoint:
+
+```bash
+scripts/check.sh --release --remote-host <host> --coolify-resource-uuid <uuid> --full
+```
+
+This starts or selects the finished Coolify image with the remote Coolify
+application `.env`, verifies source/image identity, and runs real HTTP smoke
+and audit checks. `--endpoint-only` is for temporary diagnostics only and is
+not release-authoritative.
+
 ### Method 1: Script Installation (Recommended)
 
 One-click installation script that downloads pre-built binaries from GitHub Releases.
