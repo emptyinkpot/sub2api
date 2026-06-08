@@ -26,22 +26,24 @@ usage() {
 '  --smoke           Deployment acceptance; default when no mode is provided' \
 '  --release         Release acceptance against the deployed server image' \
 '  --audit-keys      Audit all downstream consumer keys' \
+'  --audit-models    Audit every exposed downstream model' \
 '  --audit-upstream  Audit all upstream accounts/providers' \
 '  --audit-routing   Audit routing health for consumer-key groups' \
-'  --full            Run smoke, key audit, upstream audit, and routing audit' \
+'  --full            Run smoke, key audit, model audit, upstream audit, and routing audit' \
 '' \
 'Examples:' \
 '  scripts/check.sh' \
 '  scripts/check.sh --release --full' \
 '  scripts/check.sh --smoke --full' \
 '  scripts/check.sh --audit-keys --models-only' \
+'  scripts/check.sh --audit-models --model-filter gpt-5' \
 '  scripts/check.sh --audit-upstream --platform openai' \
 '  scripts/check.sh --audit-routing' \
 '  scripts/check.sh --full --base-url https://sub2api.tengokukk.com' \
 '' \
 'Notes:' \
 '  --release validates the Coolify-deployed server image over real HTTP.' \
-'  --full at top level means "run every check module".' \
+'  --full at top level means "run every check module" and report aggregate failures.' \
 '  To run the full smoke profile only, use: scripts/check.sh --smoke --full' \
 '  Top-level --full accepts only options shared by every module: --base-url and --timeout.'
 }
@@ -78,10 +80,29 @@ run_full() {
     esac
   done
 
-  run_module smoke.sh --full "${shared_args[@]}"
-  run_module audit-keys.sh "${shared_args[@]}"
-  run_module audit-upstream.sh "${shared_args[@]}"
-  run_module audit-routing.sh "${shared_args[@]}"
+  local failed=0
+
+  if ! run_module smoke.sh --full "${shared_args[@]}"; then
+    failed=$((failed + 1))
+  fi
+  if ! run_module audit-keys.sh "${shared_args[@]}"; then
+    failed=$((failed + 1))
+  fi
+  if ! run_module audit-models.sh "${shared_args[@]}"; then
+    failed=$((failed + 1))
+  fi
+  if ! run_module audit-upstream.sh "${shared_args[@]}"; then
+    failed=$((failed + 1))
+  fi
+  if ! run_module audit-routing.sh "${shared_args[@]}"; then
+    failed=$((failed + 1))
+  fi
+
+  if [ "$failed" -gt 0 ]; then
+    printf 'FULL CHECK FAILED failed_modules=%d\n' "$failed" >&2
+    return 1
+  fi
+  printf 'FULL CHECK PASSED\n'
 }
 
 if [ "$#" -eq 0 ]; then
@@ -101,6 +122,9 @@ case "$mode" in
     ;;
   --audit-keys)
     run_module audit-keys.sh "$@"
+    ;;
+  --audit-models)
+    run_module audit-models.sh "$@"
     ;;
   --audit-upstream)
     run_module audit-upstream.sh "$@"

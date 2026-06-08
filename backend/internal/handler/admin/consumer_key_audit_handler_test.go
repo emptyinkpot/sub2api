@@ -80,6 +80,54 @@ func TestConsumerKeyAuditForcedModelDoesNotFallback(t *testing.T) {
 	require.Contains(t, result.Chat.Error, "forced model failed")
 }
 
+func TestConsumerKeyAuditImageCapabilityUsesImagesEndpoint(t *testing.T) {
+	var requestedModel string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"gpt-image-2"}]}`))
+		case "/v1/images/generations":
+			var body struct {
+				Model          string `json:"model"`
+				Prompt         string `json:"prompt"`
+				ResponseFormat string `json:"response_format"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			requestedModel = body.Model
+			require.NotEmpty(t, body.Prompt)
+			require.Equal(t, "b64_json", body.ResponseFormat)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"b64_json":"aGVsbG8="}]}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := &ConsumerKeyAuditHandler{httpClient: upstream.Client()}
+
+	result := handler.testConsumerKey(context.Background(), activeConsumerKey(), upstream.URL+"/v1", ConsumerKeyAuditTestRequest{
+		Model:      "gpt-image-2",
+		Capability: "image",
+	})
+
+	require.True(t, result.Success)
+	require.Equal(t, "gpt-image-2", requestedModel)
+	require.Equal(t, "gpt-image-2", result.SelectedModel)
+	require.Equal(t, "image", result.Capability)
+	require.NotNil(t, result.Image)
+	require.True(t, result.Image.Success)
+	require.Nil(t, result.Chat)
+}
+
+func TestConsumerKeyAuditRejectsUnsupportedCapability(t *testing.T) {
+	capability, err := normalizeConsumerKeyAuditCapability("embedding")
+
+	require.Error(t, err)
+	require.Empty(t, capability)
+}
+
 func activeConsumerKey() *service.APIKey {
 	groupID := int64(1)
 	return &service.APIKey{

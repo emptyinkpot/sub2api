@@ -28,6 +28,11 @@ const (
 	consumerKeyAuditMaxChatTries = 5
 )
 
+const (
+	consumerKeyAuditCapabilityChat  = "chat"
+	consumerKeyAuditCapabilityImage = "image"
+)
+
 // ConsumerKeyAuditHandler exposes admin-only downstream key audit endpoints.
 type ConsumerKeyAuditHandler struct {
 	apiKeyService *service.APIKeyService
@@ -72,6 +77,7 @@ type ConsumerKeyAuditItem struct {
 type ConsumerKeyAuditTestRequest struct {
 	Model       string `json:"model"`
 	Prompt      string `json:"prompt"`
+	Capability  string `json:"capability"`
 	ModelsOnly  bool   `json:"models_only"`
 	ChatBaseURL string `json:"chat_base_url"`
 	TimeoutSec  int    `json:"timeout_sec"`
@@ -90,10 +96,12 @@ type ConsumerKeyAuditTestResult struct {
 	Success       bool                   `json:"success"`
 	ChatBaseURL   string                 `json:"chat_base_url"`
 	SelectedModel string                 `json:"selected_model,omitempty"`
+	Capability    string                 `json:"capability,omitempty"`
 	Models        []string               `json:"models,omitempty"`
 	ModelCount    int                    `json:"model_count"`
 	ModelList     ConsumerKeyAuditProbe  `json:"model_list"`
 	Chat          *ConsumerKeyAuditProbe `json:"chat,omitempty"`
+	Image         *ConsumerKeyAuditProbe `json:"image,omitempty"`
 	ModelsOnly    bool                   `json:"models_only"`
 	DurationMS    int64                  `json:"duration_ms"`
 }
@@ -164,6 +172,10 @@ func (h *ConsumerKeyAuditHandler) Test(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if _, err := normalizeConsumerKeyAuditCapability(req.Capability); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	apiKey, err := h.apiKeyService.GetByID(c.Request.Context(), keyID)
 	if err != nil {
@@ -213,6 +225,12 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 		return result
 	}
 
+	capability, _ := normalizeConsumerKeyAuditCapability(req.Capability)
+	if capability == "" {
+		capability = consumerKeyAuditCapabilityChat
+	}
+	result.Capability = capability
+
 	candidateModels := consumerKeyAuditCandidateModels(req.Model, models)
 	if len(candidateModels) == 0 {
 		result.ModelList.Success = false
@@ -222,36 +240,68 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 
 	prompt := strings.TrimSpace(req.Prompt)
 	if prompt == "" {
-		prompt = "Reply with a short confirmation that sub2api consumer key audit is OK."
+		prompt = defaultConsumerKeyAuditPrompt(capability)
 	}
 	for _, model := range candidateModels {
-		chatBody, _ := json.Marshal(gin.H{
-			"model":       model,
-			"messages":    []gin.H{{"role": "user", "content": prompt}},
-			"temperature": 0,
-			"max_tokens":  32,
-			"stream":      false,
-		})
-
-		chatProbe := h.gatewayRequest(ctx, http.MethodPost, chatBaseURL+"/chat/completions", apiKey.Key, chatBody, "application/json")
-		chatResult := chatProbe.result
-		if chatResult.Success {
-			content := extractConsumerKeyAuditChatContent(chatProbe.body)
-			if strings.TrimSpace(content) == "" {
-				chatResult.Success = false
-				chatResult.Error = "chat completion returned no assistant content"
-			} else {
-				chatResult.ContentPreview = truncateConsumerKeyAuditText(content, 160)
-			}
-		}
 		result.SelectedModel = model
-		result.Chat = &chatResult
-		if chatResult.Success {
+		var probe ConsumerKeyAuditProbe
+		if capability == consumerKeyAuditCapabilityImage {
+			probe = h.testConsumerKeyImage(ctx, apiKey, chatBaseURL, model, prompt)
+			result.Image = &probe
+		} else {
+			probe = h.testConsumerKeyChat(ctx, apiKey, chatBaseURL, model, prompt)
+			result.Chat = &probe
+		}
+		if probe.Success {
 			result.Success = result.ModelList.Success
 			return result
 		}
 	}
 	return result
+}
+
+func (h *ConsumerKeyAuditHandler) testConsumerKeyChat(ctx context.Context, apiKey *service.APIKey, chatBaseURL, model, prompt string) ConsumerKeyAuditProbe {
+	chatBody, _ := json.Marshal(gin.H{
+		"model":       model,
+		"messages":    []gin.H{{"role": "user", "content": prompt}},
+		"temperature": 0,
+		"max_tokens":  32,
+		"stream":      false,
+	})
+
+	chatProbe := h.gatewayRequest(ctx, http.MethodPost, chatBaseURL+"/chat/completions", apiKey.Key, chatBody, "application/json")
+	chatResult := chatProbe.result
+	if chatResult.Success {
+		content := extractConsumerKeyAuditChatContent(chatProbe.body)
+		if strings.TrimSpace(content) == "" {
+			chatResult.Success = false
+			chatResult.Error = "chat completion returned no assistant content"
+		} else {
+			chatResult.ContentPreview = truncateConsumerKeyAuditText(content, 160)
+		}
+	}
+	return chatResult
+}
+
+func (h *ConsumerKeyAuditHandler) testConsumerKeyImage(ctx context.Context, apiKey *service.APIKey, chatBaseURL, model, prompt string) ConsumerKeyAuditProbe {
+	imageBody, _ := json.Marshal(gin.H{
+		"model":           model,
+		"prompt":          prompt,
+		"n":               1,
+		"response_format": "b64_json",
+	})
+
+	imageProbe := h.gatewayRequest(ctx, http.MethodPost, chatBaseURL+"/images/generations", apiKey.Key, imageBody, "application/json")
+	imageResult := imageProbe.result
+	if imageResult.Success {
+		if !consumerKeyAuditImageReturned(imageProbe.body) {
+			imageResult.Success = false
+			imageResult.Error = "image generation returned no image payload"
+		} else {
+			imageResult.ContentPreview = "image payload returned"
+		}
+	}
+	return imageResult
 }
 
 func (h *ConsumerKeyAuditHandler) gatewayRequest(ctx context.Context, method, rawURL, apiKey string, body []byte, accept string) consumerKeyGatewayProbe {
@@ -519,6 +569,28 @@ func consumerKeyAuditCandidateModels(requestedModel string, models []string) []s
 	return capConsumerKeyAuditModels(models, consumerKeyAuditMaxChatTries)
 }
 
+func normalizeConsumerKeyAuditCapability(raw string) (string, error) {
+	capability := strings.ToLower(strings.TrimSpace(raw))
+	switch capability {
+	case "", consumerKeyAuditCapabilityChat, "text":
+		if capability == "text" {
+			return consumerKeyAuditCapabilityChat, nil
+		}
+		return capability, nil
+	case consumerKeyAuditCapabilityImage:
+		return capability, nil
+	default:
+		return "", fmt.Errorf("unsupported capability %q", raw)
+	}
+}
+
+func defaultConsumerKeyAuditPrompt(capability string) string {
+	if capability == consumerKeyAuditCapabilityImage {
+		return "Draw a simple red square icon on a plain white background."
+	}
+	return "Reply with a short confirmation that sub2api consumer key audit is OK."
+}
+
 func extractConsumerKeyAuditChatContent(body []byte) string {
 	var payload struct {
 		Choices []struct {
@@ -546,6 +618,39 @@ func extractConsumerKeyAuditChatContent(body []byte) string {
 		}
 	}
 	return ""
+}
+
+func consumerKeyAuditImageReturned(body []byte) bool {
+	var payload struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		for _, item := range payload.Data {
+			if strings.TrimSpace(item.B64JSON) != "" || strings.TrimSpace(item.URL) != "" {
+				return true
+			}
+		}
+	}
+	var responsePayload struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Result  string `json:"result"`
+			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(body, &responsePayload); err != nil {
+		return false
+	}
+	for _, item := range responsePayload.Output {
+		if strings.TrimSpace(item.Result) != "" || strings.TrimSpace(item.B64JSON) != "" || strings.TrimSpace(item.URL) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func consumerKeyAuditContentToString(value any) string {

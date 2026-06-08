@@ -18,7 +18,7 @@ ADMIN_TOKEN=""
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/check.sh --release [--full|--smoke|--audit-keys|--audit-upstream|--audit-routing] [options]
+  scripts/check.sh --release [--full|--smoke|--audit-keys|--audit-models|--audit-upstream|--audit-routing] [options]
 
 Release acceptance for the Coolify-deployed server image. This mode does not
 start local containers, source dev servers, mocks, or dry runs. It waits for
@@ -28,6 +28,7 @@ Examples:
   scripts/check.sh --release --full
   scripts/check.sh --release --smoke --full
   scripts/check.sh --release --audit-keys --models-only
+  scripts/check.sh --release --audit-models --model-filter gpt-5
   scripts/check.sh --release --base-url https://staging.example.com --full
 
 Options:
@@ -119,7 +120,7 @@ commit_matches() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --full|--smoke|--audit-keys|--audit-upstream|--audit-routing)
+    --full|--smoke|--audit-keys|--audit-models|--audit-upstream|--audit-routing)
       if [ "$CHECK_MODE_SET" -eq 0 ]; then
         CHECK_MODE="$1"
         CHECK_MODE_SET=1
