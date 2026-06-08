@@ -121,11 +121,68 @@ func TestConsumerKeyAuditImageCapabilityUsesImagesEndpoint(t *testing.T) {
 	require.Nil(t, result.Chat)
 }
 
+func TestConsumerKeyAuditGeminiImageCapabilityUsesV1BetaStreamEndpoint(t *testing.T) {
+	var requestedPath string
+	var requestedPrompt string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"gemini-2.5-flash-image"}]}`))
+		case "/v1beta/models/gemini-2.5-flash-image:streamGenerateContent":
+			requestedPath = r.URL.String()
+			var body struct {
+				Contents []struct {
+					Parts []struct {
+						Text string `json:"text"`
+					} `json:"parts"`
+				} `json:"contents"`
+				GenerationConfig struct {
+					ResponseModalities []string `json:"responseModalities"`
+				} `json:"generationConfig"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Len(t, body.Contents, 1)
+			require.Len(t, body.Contents[0].Parts, 1)
+			requestedPrompt = body.Contents[0].Parts[0].Text
+			require.Equal(t, []string{"TEXT", "IMAGE"}, body.GenerationConfig.ResponseModalities)
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: {\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"QUJD\"}}]}}]}\n\n"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := &ConsumerKeyAuditHandler{httpClient: upstream.Client()}
+
+	result := handler.testConsumerKey(context.Background(), activeGeminiConsumerKey(), upstream.URL+"/v1", ConsumerKeyAuditTestRequest{
+		Model:      "gemini-2.5-flash-image",
+		Capability: "gemini-image",
+	})
+
+	require.True(t, result.Success)
+	require.Equal(t, "/v1beta/models/gemini-2.5-flash-image:streamGenerateContent?alt=sse", requestedPath)
+	require.NotEmpty(t, requestedPrompt)
+	require.Equal(t, "gemini-2.5-flash-image", result.SelectedModel)
+	require.Equal(t, "gemini-image", result.Capability)
+	require.NotNil(t, result.Image)
+	require.True(t, result.Image.Success)
+	require.Nil(t, result.Chat)
+}
+
 func TestConsumerKeyAuditRejectsUnsupportedCapability(t *testing.T) {
 	capability, err := normalizeConsumerKeyAuditCapability("embedding")
 
 	require.Error(t, err)
 	require.Empty(t, capability)
+}
+
+func activeGeminiConsumerKey() *service.APIKey {
+	key := activeConsumerKey()
+	key.Group.Name = "gemini"
+	key.Group.Platform = service.PlatformGemini
+	return key
 }
 
 func activeConsumerKey() *service.APIKey {

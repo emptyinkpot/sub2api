@@ -30,7 +30,7 @@ Options:
   --query TEXT         Filter by key name
   --status STATUS      Filter listed keys by status
   --model-filter TEXT  Only audit models containing this substring
-  --include-image      Also run real image-generation probes for OpenAI image models
+  --include-image      Also run real image-generation probes for OpenAI/Gemini image models
   --include-unusable   Also audit keys marked unusable by metadata
   --sleep-ms N         Milliseconds to wait between real model probes, default 500
   --timeout SEC        Per-request timeout
@@ -235,12 +235,7 @@ while IFS= read -r item; do
         skip_count=$((skip_count + 1))
         continue
         ;;
-      gemini-image)
-        audit_skip "$model_label reason=gemini-image-generation-audit-not-implemented"
-        skip_count=$((skip_count + 1))
-        continue
-        ;;
-      image)
+      gemini-image|image)
         if [ "$INCLUDE_IMAGE" -eq 0 ]; then
           audit_skip "$model_label reason=image-generation-disabled"
           skip_count=$((skip_count + 1))

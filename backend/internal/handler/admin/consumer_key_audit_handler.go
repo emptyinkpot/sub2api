@@ -29,8 +29,9 @@ const (
 )
 
 const (
-	consumerKeyAuditCapabilityChat  = "chat"
-	consumerKeyAuditCapabilityImage = "image"
+	consumerKeyAuditCapabilityChat        = "chat"
+	consumerKeyAuditCapabilityImage       = "image"
+	consumerKeyAuditCapabilityGeminiImage = "gemini-image"
 )
 
 // ConsumerKeyAuditHandler exposes admin-only downstream key audit endpoints.
@@ -245,10 +246,14 @@ func (h *ConsumerKeyAuditHandler) testConsumerKey(ctx context.Context, apiKey *s
 	for _, model := range candidateModels {
 		result.SelectedModel = model
 		var probe ConsumerKeyAuditProbe
-		if capability == consumerKeyAuditCapabilityImage {
+		switch capability {
+		case consumerKeyAuditCapabilityImage:
 			probe = h.testConsumerKeyImage(ctx, apiKey, chatBaseURL, model, prompt)
 			result.Image = &probe
-		} else {
+		case consumerKeyAuditCapabilityGeminiImage:
+			probe = h.testConsumerKeyGeminiImage(ctx, apiKey, chatBaseURL, model, prompt)
+			result.Image = &probe
+		default:
 			probe = h.testConsumerKeyChat(ctx, apiKey, chatBaseURL, model, prompt)
 			result.Chat = &probe
 		}
@@ -297,6 +302,39 @@ func (h *ConsumerKeyAuditHandler) testConsumerKeyImage(ctx context.Context, apiK
 		if !consumerKeyAuditImageReturned(imageProbe.body) {
 			imageResult.Success = false
 			imageResult.Error = "image generation returned no image payload"
+		} else {
+			imageResult.ContentPreview = "image payload returned"
+		}
+	}
+	return imageResult
+}
+
+func (h *ConsumerKeyAuditHandler) testConsumerKeyGeminiImage(ctx context.Context, apiKey *service.APIKey, chatBaseURL, model, prompt string) ConsumerKeyAuditProbe {
+	imageBody, _ := json.Marshal(gin.H{
+		"contents": []gin.H{
+			{
+				"role": "user",
+				"parts": []gin.H{
+					{"text": prompt},
+				},
+			},
+		},
+		"generationConfig": gin.H{
+			"responseModalities": []string{"TEXT", "IMAGE"},
+			"imageConfig": gin.H{
+				"aspectRatio": "1:1",
+			},
+		},
+	})
+
+	geminiBaseURL := strings.TrimRight(strings.TrimSuffix(chatBaseURL, "/v1"), "/")
+	rawURL := geminiBaseURL + "/v1beta/models/" + url.PathEscape(model) + ":streamGenerateContent?alt=sse"
+	imageProbe := h.gatewayRequest(ctx, http.MethodPost, rawURL, apiKey.Key, imageBody, "text/event-stream")
+	imageResult := imageProbe.result
+	if imageResult.Success {
+		if !consumerKeyAuditImageReturned(imageProbe.body) {
+			imageResult.Success = false
+			imageResult.Error = "gemini image generation returned no image payload"
 		} else {
 			imageResult.ContentPreview = "image payload returned"
 		}
@@ -577,7 +615,7 @@ func normalizeConsumerKeyAuditCapability(raw string) (string, error) {
 			return consumerKeyAuditCapabilityChat, nil
 		}
 		return capability, nil
-	case consumerKeyAuditCapabilityImage:
+	case consumerKeyAuditCapabilityImage, consumerKeyAuditCapabilityGeminiImage:
 		return capability, nil
 	default:
 		return "", fmt.Errorf("unsupported capability %q", raw)
@@ -585,7 +623,7 @@ func normalizeConsumerKeyAuditCapability(raw string) (string, error) {
 }
 
 func defaultConsumerKeyAuditPrompt(capability string) string {
-	if capability == consumerKeyAuditCapabilityImage {
+	if capability == consumerKeyAuditCapabilityImage || capability == consumerKeyAuditCapabilityGeminiImage {
 		return "Draw a simple red square icon on a plain white background."
 	}
 	return "Reply with a short confirmation that sub2api consumer key audit is OK."
@@ -621,6 +659,15 @@ func extractConsumerKeyAuditChatContent(body []byte) string {
 }
 
 func consumerKeyAuditImageReturned(body []byte) bool {
+	bodyText := string(body)
+	if strings.Contains(bodyText, `"b64_json"`) ||
+		strings.Contains(bodyText, `"image_url"`) ||
+		strings.Contains(bodyText, `"inlineData"`) ||
+		strings.Contains(bodyText, `"inline_data"`) ||
+		strings.Contains(strings.ToLower(bodyText), `data:image/`) {
+		return true
+	}
+
 	var payload struct {
 		Data []struct {
 			B64JSON string `json:"b64_json"`
