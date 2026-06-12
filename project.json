@@ -30,8 +30,8 @@
     "appTarget": "app",
     "mcpTarget": "mcp",
     "releaseTarget": "goreleaser",
-    "coolifyResourceUuid": null,
-    "remoteHost": null,
+    "coolifyResourceUuid": "m7tduvm4nqte1352aeu5qn2n",
+    "remoteHost": "server-170",
     "runtimeRoot": "/data/coolify/applications/{coolifyResourceUuid}",
     "envSource": "Coolify application .env"
   },
@@ -77,7 +77,7 @@
       "plaintext secrets in repository files"
     ]
   },
-  "status": "coolify-migration-in-progress",
+  "status": "coolify-production-active",
   "publicBaseUrl": "https://sub2api.tengokukk.com",
   "publicHealthPath": "/health"
 }

@@ -185,7 +185,7 @@ provider, dry run, or host-local rebuild script.
 Release acceptance is owned by the single check entrypoint:
 
 ```bash
-scripts/check.sh --release --remote-host <host> --coolify-resource-uuid <uuid> --full
+scripts/check.sh --release --remote-host server-170 --coolify-resource-uuid m7tduvm4nqte1352aeu5qn2n --full
 ```
 
 This starts or selects the finished Coolify image with the remote Coolify
