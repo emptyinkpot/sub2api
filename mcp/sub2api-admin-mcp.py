@@ -11,6 +11,7 @@ import logging
 import httpx
 import uvicorn
 import contextlib
+from urllib.parse import urlparse, urlunparse
 from mcp.server import Server
 from mcp.server.streamable_http import StreamableHTTPServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -31,6 +32,15 @@ MAX_TEXT = 6000
 PATROL_STATE_FILE = os.environ.get("PATROL_STATE_FILE", "/data/patrol_state.json")
 
 app = Server("sub2api-admin-mcp")
+
+
+def _service_base_url() -> str:
+    """Derive the service root from SUB2API_BASE, whose canonical value ends in /api/v1."""
+    parsed = urlparse(BASE)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/api/v1"):
+        path = path[:-len("/api/v1")] or "/"
+    return urlunparse(parsed._replace(path=path.rstrip("/") or "", params="", query="", fragment=""))
 
 
 def _headers():
@@ -62,6 +72,20 @@ async def _req(method: str, path: str, *, params=None, json_body=None, timeout=3
     return True, body
 
 
+async def _public_req(method: str, path: str, *, timeout=30.0):
+    try:
+        async with httpx.AsyncClient(base_url=_service_base_url(), timeout=timeout) as c:
+            r = await c.request(method, path, headers={"Accept": "application/json"})
+    except Exception as e:
+        return False, f"Request error: {type(e).__name__}: {e}"
+    if r.status_code < 200 or r.status_code >= 300:
+        return False, f"HTTP {r.status_code}: {r.text[:500]}"
+    try:
+        return True, r.json()
+    except Exception:
+        return True, r.text
+
+
 @app.list_tools()
 async def list_tools():
     return [
@@ -71,6 +95,17 @@ async def list_tools():
                  "platform": {"type": "string", "description": "Filter by platform (anthropic/openai/gemini)"},
                  "group_id": {"type": "integer", "description": "Filter by group ID"}
              }}),
+        Tool(name="service_health",
+             description="Check deployed sub2api HTTP health from the MCP runtime network.",
+             inputSchema={"type": "object", "properties": {}}),
+        Tool(name="service_version",
+             description="Read deployed sub2api version/build identity from admin system/version.",
+             inputSchema={"type": "object", "properties": {}}),
+        Tool(name="release_identity",
+             description="Validate deployed service commit against an expected commit prefix or full SHA.",
+             inputSchema={"type": "object", "properties": {
+                 "expect_commit": {"type": "string", "description": "Expected commit full SHA or prefix"}
+             }, "required": ["expect_commit"]}),
         Tool(name="list_accounts",
              description="List accounts with filtering by group/status/platform/keyword + pagination.",
              inputSchema={"type": "object", "properties": {
@@ -218,6 +253,24 @@ def _fmt(data) -> str:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict):
     a = arguments or {}
+
+    if name == "service_health":
+        ok, data = await _public_req("GET", "/health")
+        return [TextContent(type="text", text=("Service health:\n" + _fmt(data)) if ok else f"Health failed: {data}")]
+
+    if name == "service_version":
+        ok, data = await _req("GET", "/admin/system/version")
+        return [TextContent(type="text", text=("Service version:\n" + _fmt(data)) if ok else f"Version failed: {data}")]
+
+    if name == "release_identity":
+        expected = a["expect_commit"]
+        ok, data = await _req("GET", "/admin/system/version")
+        if not ok:
+            return [TextContent(type="text", text=f"Release identity failed: {data}")]
+        actual = data.get("commit", "") if isinstance(data, dict) else ""
+        matched = bool(actual) and (actual == expected or actual.startswith(expected) or expected.startswith(actual))
+        status = "MATCH" if matched else "MISMATCH"
+        return [TextContent(type="text", text=f"Release identity {status}\nexpected={expected}\nactual={actual}\nversion:\n{_fmt(data)}")]
 
     if name == "pool_health":
         params = {k: a[k] for k in ("platform", "group_id") if a.get(k) is not None}
