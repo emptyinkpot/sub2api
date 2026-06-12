@@ -28,6 +28,10 @@ BASE = os.environ.get("SUB2API_BASE", "http://sub2api:8080/api/v1")
 TOKEN = os.environ.get("SUB2API_ADMIN_TOKEN", "")
 MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
 MCP_PORT = int(os.environ.get("MCP_PORT", "8765"))
+DEPLOY_REMOTE_HOST = os.environ.get("SUB2API_DEPLOY_REMOTE_HOST", "server-170")
+COOLIFY_RESOURCE_UUID = os.environ.get("SUB2API_COOLIFY_RESOURCE_UUID", "m7tduvm4nqte1352aeu5qn2n")
+GITHUB_REPO = os.environ.get("SUB2API_GITHUB_REPO", "emptyinkpot/sub2api")
+GITHUB_BRANCH = os.environ.get("SUB2API_GITHUB_BRANCH", "integration/upstream-rebase")
 MAX_TEXT = 6000
 PATROL_STATE_FILE = os.environ.get("PATROL_STATE_FILE", "/data/patrol_state.json")
 
@@ -49,6 +53,23 @@ def _headers():
 
 def _truncate(s: str) -> str:
     return s if len(s) <= MAX_TEXT else s[:MAX_TEXT] + f"\n...(truncated, total {len(s)} chars)"
+
+
+def _deployment_target() -> dict:
+    """Expose the deployment contract without granting deploy mutation authority."""
+    return {
+        "github_repo": GITHUB_REPO,
+        "github_branch": GITHUB_BRANCH,
+        "remote_host": DEPLOY_REMOTE_HOST,
+        "coolify_resource_uuid": COOLIFY_RESOURCE_UUID,
+        "public_base_url": _service_base_url(),
+        "release_acceptance": (
+            "scripts/check.sh --release "
+            f"--remote-host {DEPLOY_REMOTE_HOST} "
+            f"--coolify-resource-uuid {COOLIFY_RESOURCE_UUID} --full"
+        ),
+        "mutation_boundary": "read-only; deploy triggering remains owned by Coolify/release tooling",
+    }
 
 
 async def _req(method: str, path: str, *, params=None, json_body=None, timeout=30.0):
@@ -106,6 +127,14 @@ async def list_tools():
              inputSchema={"type": "object", "properties": {
                  "expect_commit": {"type": "string", "description": "Expected commit full SHA or prefix"}
              }, "required": ["expect_commit"]}),
+        Tool(name="deployment_target",
+             description="Read the canonical sub2api deployment target used by this MCP.",
+             inputSchema={"type": "object", "properties": {}}),
+        Tool(name="release_status",
+             description="Read service health, version, deployment target, and optional commit match in one report.",
+             inputSchema={"type": "object", "properties": {
+                 "expect_commit": {"type": "string", "description": "Optional expected commit full SHA or prefix"}
+             }}),
         Tool(name="list_accounts",
              description="List accounts with filtering by group/status/platform/keyword + pagination.",
              inputSchema={"type": "object", "properties": {
@@ -271,6 +300,31 @@ async def call_tool(name: str, arguments: dict):
         matched = bool(actual) and (actual == expected or actual.startswith(expected) or expected.startswith(actual))
         status = "MATCH" if matched else "MISMATCH"
         return [TextContent(type="text", text=f"Release identity {status}\nexpected={expected}\nactual={actual}\nversion:\n{_fmt(data)}")]
+
+    if name == "deployment_target":
+        return [TextContent(type="text", text="Deployment target:\n" + _fmt(_deployment_target()))]
+
+    if name == "release_status":
+        report = {"deployment_target": _deployment_target()}
+
+        health_ok, health_data = await _public_req("GET", "/health")
+        report["service_health"] = {"ok": health_ok, "data": health_data}
+
+        version_ok, version_data = await _req("GET", "/admin/system/version")
+        report["service_version"] = {"ok": version_ok, "data": version_data}
+
+        expected = a.get("expect_commit")
+        if expected:
+            actual = version_data.get("commit", "") if version_ok and isinstance(version_data, dict) else ""
+            matched = bool(actual) and (actual == expected or actual.startswith(expected) or expected.startswith(actual))
+            report["release_identity"] = {
+                "expected": expected,
+                "actual": actual,
+                "matched": matched,
+                "status": "MATCH" if matched else "MISMATCH",
+            }
+
+        return [TextContent(type="text", text="Release status:\n" + _fmt(report))]
 
     if name == "pool_health":
         params = {k: a[k] for k in ("platform", "group_id") if a.get(k) is not None}
