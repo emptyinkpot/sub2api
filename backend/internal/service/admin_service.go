@@ -2511,6 +2511,17 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 			return nil, err
 		}
 	}
+	if input.Type == AccountTypeAPIKey && len(groupIDs) > 0 {
+		for _, gid := range groupIDs {
+			group, err := s.groupRepo.GetByID(ctx, gid)
+			if err != nil {
+				return nil, err
+			}
+			if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini) {
+				return nil, fmt.Errorf("分组 [%s] 仅允许 OAuth 账号，apikey 类型账号无法加入", group.Name)
+			}
+		}
+	}
 
 	account := &Account{
 		Name:        input.Name,

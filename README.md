@@ -193,6 +193,10 @@ application `.env`, verifies source/image identity, and runs real HTTP smoke
 and audit checks. `--endpoint-only` is for temporary diagnostics only and is
 not release-authoritative.
 
+The installation methods below are upstream/general-purpose deployment notes.
+They are not authoritative for this fork's production release path unless
+`project.json` and `scripts/check.sh --release` are updated together.
+
 ### Method 1: Script Installation (Recommended)
 
 One-click installation script that downloads pre-built binaries from GitHub Releases.

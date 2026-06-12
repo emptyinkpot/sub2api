@@ -4598,14 +4598,6 @@ const handleSubmit = async () => {
       credentials.aws_force_global = 'true'
     }
 
-    // Model mapping
-    const modelMapping = buildModelMappingObject(
-      modelRestrictionMode.value, allowedModels.value, modelMappings.value
-    )
-    if (modelMapping) {
-      credentials.model_mapping = modelMapping
-    }
-
     // Pool mode
     if (poolModeEnabled.value) {
       credentials.pool_mode = true
@@ -4710,8 +4702,9 @@ const handleSubmit = async () => {
     credentials.tier_id = geminiTierAIStudio.value
   }
 
-  // Add model mapping if configured（OpenAI 开启自动透传时不应用）
-  if (!isOpenAIModelRestrictionDisabled.value) {
+  // Channel-level mapping owns OpenAI/Anthropic/Gemini routing now; only Antigravity
+  // still persists account-level model_mapping in credentials.
+  if (form.platform === 'antigravity') {
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
     if (modelMapping) {
       credentials.model_mapping = modelMapping
@@ -4898,13 +4891,6 @@ const handleOpenAIExchange = async (authCode: string) => {
     const extra = buildOpenAIExtra(oauthExtra)
     const shouldCreateOpenAI = form.platform === 'openai'
 
-    // Add model mapping for OpenAI OAuth accounts（透传模式下不应用）
-    if (shouldCreateOpenAI && !isOpenAIModelRestrictionDisabled.value) {
-      const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-      if (modelMapping) {
-        credentials.model_mapping = modelMapping
-      }
-    }
     if (shouldCreateOpenAI) {
       const compactModelMapping = buildOpenAICompactModelMapping()
       if (compactModelMapping) {
@@ -4953,12 +4939,6 @@ const OPENAI_MOBILE_RT_CLIENT_ID = 'app_LlGpXReQgckcGGUo2JrYvtJK'
 
 const buildOpenAICodexImportCredentialExtras = (): Record<string, unknown> | null => {
   const credentials: Record<string, unknown> = {}
-  if (!isOpenAIModelRestrictionDisabled.value) {
-    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-    if (modelMapping) {
-      credentials.model_mapping = modelMapping
-    }
-  }
 
   const compactModelMapping = buildOpenAICompactModelMapping()
   if (compactModelMapping) {
@@ -5103,13 +5083,6 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         const oauthExtra = oauthClient.buildExtraInfo(tokenInfo) as Record<string, unknown> | undefined
         const extra = buildOpenAIExtra(oauthExtra)
 
-        // Add model mapping for OpenAI OAuth accounts（透传模式下不应用）
-        if (shouldCreateOpenAI && !isOpenAIModelRestrictionDisabled.value) {
-          const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-          if (modelMapping) {
-            credentials.model_mapping = modelMapping
-          }
-        }
         if (shouldCreateOpenAI) {
           const compactModelMapping = buildOpenAICompactModelMapping()
           if (compactModelMapping) {
