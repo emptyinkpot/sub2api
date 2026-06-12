@@ -37,10 +37,12 @@ echo "Stopping existing container (if any)..."
 sudo docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
 echo "Starting container..."
+# nginx proxies /mcp/ to host loopback, so keep the MCP port host-bound.
 sudo docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
   --network "$NETWORK" \
+  -p "127.0.0.1:${MCP_PORT}:${MCP_PORT}" \
   -v "$STATE_FILE:$PATROL_STATE_FILE" \
   -e SUB2API_BASE="$SUB2API_BASE" \
   -e SUB2API_ADMIN_TOKEN="$SUB2API_ADMIN_TOKEN" \
