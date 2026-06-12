@@ -37,6 +37,37 @@ PATROL_STATE_FILE = os.environ.get("PATROL_STATE_FILE", "/data/patrol_state.json
 
 app = Server("sub2api-admin-mcp")
 
+TOOL_CATALOG = {
+    "ops_capabilities": ("mcp/read", "read", "Start here. Describes tool groups, risk levels, and safe usage."),
+    "service_health": ("service/read", "read", "Check deployed HTTP health."),
+    "service_version": ("service/read", "read", "Read deployed version/build identity."),
+    "release_identity": ("release/read", "read", "Compare deployed commit with an expected commit."),
+    "deployment_target": ("release/read", "read", "Read canonical deployment target for this MCP."),
+    "release_status": ("release/read", "read", "Read health, version, deployment target, and optional commit match."),
+    "pool_health": ("accounts/read", "read", "Read account pool availability aggregate."),
+    "list_accounts": ("accounts/read", "read", "List accounts with filters and pagination."),
+    "account_detail": ("accounts/read", "read", "Read one account and recent usage stats."),
+    "list_autoheal": ("accounts/read", "read", "Read scheduled test plans for one account."),
+    "export_accounts": ("accounts/read", "sensitive-read", "Export pool backup data; may include account/proxy material."),
+    "list_groups": ("groups/read", "read", "List groups."),
+    "get_models": ("accounts/read", "read", "Read detected models for one account."),
+    "test_account": ("accounts/probe", "probe", "Send a real upstream test request; may clear recoverable state on success."),
+    "probe_account": ("accounts/probe", "mutate", "Probe upstream capabilities and write probe metadata."),
+    "pool_patrol": ("accounts/automation", "conditional-mutate", "Rule-based patrol; use dry_run first unless mutation is authorized."),
+    "set_schedulable": ("accounts/mutate", "mutate", "Toggle account schedulability."),
+    "clear_error": ("accounts/mutate", "mutate", "Clear account error state."),
+    "clear_rate_limit": ("accounts/mutate", "mutate", "Clear account rate-limit state."),
+    "bulk_update": ("accounts/mutate", "mutate", "Bulk mutate account status/scheduling/group/priority."),
+    "setup_autoheal": ("accounts/mutate", "mutate", "Create or update scheduled account recovery tests."),
+    "import_accounts": ("accounts/mutate", "high-risk-mutate", "Bulk import pool data."),
+    "create_account": ("accounts/mutate", "mutate", "Create account."),
+    "update_account": ("accounts/mutate", "mutate", "Update account config."),
+    "delete_account": ("accounts/mutate", "destructive", "Delete account irreversibly."),
+    "create_group": ("groups/mutate", "mutate", "Create group."),
+    "update_group": ("groups/mutate", "mutate", "Update group."),
+    "admin_request": ("generic/admin_request", "escape-hatch", "Diagnostic passthrough only; prefer dedicated tools."),
+}
+
 
 def _service_base_url() -> str:
     """Derive the service root from SUB2API_BASE, whose canonical value ends in /api/v1."""
@@ -69,6 +100,38 @@ def _deployment_target() -> dict:
             f"--coolify-resource-uuid {COOLIFY_RESOURCE_UUID} --full"
         ),
         "mutation_boundary": "read-only; deploy triggering remains owned by Coolify/release tooling",
+    }
+
+
+def _ops_capabilities() -> dict:
+    groups = {}
+    for tool_name, (group, risk, guidance) in TOOL_CATALOG.items():
+        groups.setdefault(group, []).append({
+            "name": tool_name,
+            "risk": risk,
+            "guidance": guidance,
+        })
+    return {
+        "server": "sub2api-admin-mcp",
+        "tool_count": len(TOOL_CATALOG),
+        "deployment_target": _deployment_target(),
+        "default_workflow": [
+            "Call ops_capabilities first for risk and grouping.",
+            "Use read tools before mutation tools.",
+            "Prefer dedicated tools over admin_request.",
+            "Use release_status after deploy or suspected drift.",
+        ],
+        "risk_policy": {
+            "read": "Safe for routine inspection.",
+            "sensitive-read": "May expose operational/account material; do not paste into logs or docs.",
+            "probe": "Calls real upstreams; use when testing an account is the objective.",
+            "mutate": "Requires explicit account/group mutation intent.",
+            "conditional-mutate": "Run with dry_run=true first unless mutation is explicitly authorized.",
+            "high-risk-mutate": "Bulk state change; verify backup/input owner before use.",
+            "destructive": "Irreversible; requires explicit target id and current-turn authorization.",
+            "escape-hatch": "Diagnostic fallback only when no dedicated tool exists.",
+        },
+        "groups": groups,
     }
 
 
@@ -110,6 +173,9 @@ async def _public_req(method: str, path: str, *, timeout=30.0):
 @app.list_tools()
 async def list_tools():
     return [
+        Tool(name="ops_capabilities",
+             description="Read the MCP capability manifest: tool groups, risk levels, safe workflow, and deployment target.",
+             inputSchema={"type": "object", "properties": {}}),
         Tool(name="pool_health",
              description="View pool health aggregate: available/error/rate-limited accounts by platform/group.",
              inputSchema={"type": "object", "properties": {
@@ -265,7 +331,7 @@ async def list_tools():
                  "id": {"type": "integer"}
              }, "required": ["id"]}),
         Tool(name="admin_request",
-             description="Generic admin API passthrough.",
+             description="Diagnostic admin API passthrough. Prefer dedicated tools; use mutating methods only with explicit authorization.",
              inputSchema={"type": "object", "properties": {
                  "method": {"type": "string", "enum": ["GET","POST","PUT","DELETE"]},
                  "path": {"type": "string", "description": "Relative path, e.g. /admin/accounts/47/groups"},
@@ -282,6 +348,9 @@ def _fmt(data) -> str:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict):
     a = arguments or {}
+
+    if name == "ops_capabilities":
+        return [TextContent(type="text", text="Ops capabilities:\n" + _fmt(_ops_capabilities()))]
 
     if name == "service_health":
         ok, data = await _public_req("GET", "/health")
