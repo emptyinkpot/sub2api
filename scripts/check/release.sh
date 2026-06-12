@@ -181,6 +181,16 @@ sudo -n grep -E "^[[:space:]]*${key}[[:space:]]*=" "$env_file" \
   remote_bash "$script" "$env_file" "$key" | head -n 1
 }
 
+image_matches_commit() {
+  local image="$1"
+  local commit="$2"
+  [ -n "$commit" ] || return 1
+  [ "$image" = "$commit" ] ||
+    [[ "$image" == *":$commit" ]] ||
+    [[ "$image" == *":${commit:0:12}"* ]] ||
+    [[ "$image" == *":${commit:0:7}"* ]]
+}
+
 resolve_remote_port() {
   if [ "$REMOTE_PORT" != "0" ]; then
     printf '%s' "$REMOTE_PORT"
@@ -295,19 +305,32 @@ run_coolify_image_acceptance() {
     exit 2
   fi
 
-  local env_file image source_commit remote_port local_port candidate_url internal_http_host
+  local env_file image source_commit env_source_commit remote_port local_port candidate_url internal_http_host
   env_file="$(resolve_remote_env_file)"
   image="$IMAGE"
   if [ -z "$image" ]; then
     image="$(resolve_current_coolify_image "$env_file")"
   fi
+  env_source_commit="$(read_remote_env_value "$env_file" SOURCE_COMMIT)"
   source_commit="$EXPECT_COMMIT"
   if [ -z "$source_commit" ]; then
-    source_commit="$(read_remote_env_value "$env_file" SOURCE_COMMIT)"
+    source_commit="$env_source_commit"
   fi
   if [ -z "$source_commit" ]; then
     echo "Coolify release env is missing SOURCE_COMMIT; cannot prove source/image identity" >&2
     exit 1
+  fi
+  # Coolify's generated .env can lag behind a rebuilt image; with an explicit
+  # expectation, the deployed image tag is the release identity source.
+  if [ -n "$EXPECT_COMMIT" ]; then
+    if ! image_matches_commit "$image" "$EXPECT_COMMIT"; then
+      echo "Coolify image does not match --expect-commit: image=$image expected=$EXPECT_COMMIT" >&2
+      exit 1
+    fi
+    if [ -n "$env_source_commit" ] && [ "$env_source_commit" != "$EXPECT_COMMIT" ]; then
+      printf '[WARN] release/source-commit-env-drift env_SOURCE_COMMIT=%s expected=%s image=%s\n' \
+        "$env_source_commit" "$EXPECT_COMMIT" "$image" >&2
+    fi
   fi
 
   remote_port="$(resolve_remote_port)"
