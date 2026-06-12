@@ -31,7 +31,18 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 echo "Building image..."
-sudo docker build -t "$IMAGE_NAME" -f "$REPO_ROOT/Dockerfile" --target mcp "$REPO_ROOT"
+# Keep the MCP image build scoped to the MCP owner. On legacy Docker builders,
+# using the full repository context for --target mcp can stall before it reaches
+# the tiny Python stage, even though the image only needs this directory.
+printf '%s\n' \
+  'FROM python:3.12-slim' \
+  'WORKDIR /app' \
+  'COPY requirements.txt .' \
+  'RUN pip install --no-cache-dir -r requirements.txt' \
+  'COPY sub2api-admin-mcp.py .' \
+  'EXPOSE 8765' \
+  'CMD ["python", "sub2api-admin-mcp.py"]' \
+  | sudo docker build -t "$IMAGE_NAME" -f - "$MCP_DIR"
 
 echo "Stopping existing container (if any)..."
 sudo docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
