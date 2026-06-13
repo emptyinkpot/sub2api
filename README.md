@@ -193,6 +193,9 @@ application `.env`, verifies source/image identity, and runs real HTTP smoke
 and audit checks. `--endpoint-only` is for temporary diagnostics only and is
 not release-authoritative.
 
+The machine-readable minimum owner set lives in `project.json` under
+`minimalFileGroups`; keep README as a projection, not a second registry.
+
 ### General-Purpose Self-Hosting
 
 The generic Linux, binary install, systemd, Docker Compose, and migration

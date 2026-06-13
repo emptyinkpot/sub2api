@@ -15,6 +15,71 @@
     "scripts/check.sh",
     "deploy/ops/README.md"
   ],
+  "minimalFileGroups": [
+    {
+      "owner": "facts",
+      "paths": [
+        "project.json"
+      ],
+      "role": "machine-readable source, delivery, deployment, and acceptance contract",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "docs",
+      "paths": [
+        "README.md"
+      ],
+      "role": "human entrypoint and projection of the canonical production path",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "source",
+      "paths": [
+        "backend/",
+        "frontend/"
+      ],
+      "role": "application implementation",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "runtime",
+      "paths": [
+        "Dockerfile"
+      ],
+      "role": "Coolify production image build entrypoint",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "validation",
+      "paths": [
+        "scripts/check.sh",
+        "scripts/check/"
+      ],
+      "role": "release acceptance and smoke/audit checks",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "ops-tool",
+      "paths": [
+        "mcp/"
+      ],
+      "role": "agent operations interface for the deployed Sub2API service",
+      "fate": "keep-canonical"
+    },
+    {
+      "owner": "upstream-self-hosting",
+      "paths": [
+        "deploy/README.md",
+        "deploy/*.example",
+        "deploy/docker-compose*.yml",
+        "deploy/install.sh",
+        "deploy/docker-deploy.sh",
+        "deploy/*.service"
+      ],
+      "role": "upstream-compatible self-hosting notes and templates, not this fork's production authority",
+      "fate": "keep-demoted"
+    }
+  ],
   "defaultBranch": "integration/upstream-rebase",
   "localSourceRoot": "E:\\My Project\\sub2api",
   "deliverySurface": {
