@@ -65,7 +65,8 @@ TOOL_CATALOG = {
     "delete_account": ("accounts/mutate", "destructive", "Delete account irreversibly."),
     "create_group": ("groups/mutate", "mutate", "Create group."),
     "update_group": ("groups/mutate", "mutate", "Update group."),
-    "admin_request": ("generic/admin_request", "escape-hatch", "Diagnostic passthrough only; prefer dedicated tools."),
+    "admin_read": ("generic/admin_read", "read", "GET-only diagnostic passthrough when no dedicated read tool exists."),
+    "admin_request": ("generic/admin_request", "escape-hatch", "Mutating diagnostic passthrough only; prefer dedicated tools."),
 }
 
 
@@ -118,7 +119,7 @@ def _ops_capabilities() -> dict:
         "default_workflow": [
             "Call ops_capabilities first for risk and grouping.",
             "Use read tools before mutation tools.",
-            "Prefer dedicated tools over admin_request.",
+            "Prefer dedicated tools over admin_read, and admin_read over admin_request.",
             "Use release_status after deploy or suspected drift.",
         ],
         "risk_policy": {
@@ -330,8 +331,14 @@ async def list_tools():
              inputSchema={"type": "object", "properties": {
                  "id": {"type": "integer"}
              }, "required": ["id"]}),
+        Tool(name="admin_read",
+             description="GET-only diagnostic admin API passthrough. Prefer dedicated read tools when one exists.",
+             inputSchema={"type": "object", "properties": {
+                 "path": {"type": "string", "description": "Relative path, e.g. /admin/accounts"},
+                 "params": {"type": "object", "description": "URL query params"}
+             }, "required": ["path"]}),
         Tool(name="admin_request",
-             description="Diagnostic admin API passthrough. Prefer dedicated tools; use mutating methods only with explicit authorization.",
+             description="Mutating diagnostic admin API passthrough. Prefer dedicated tools; use only with explicit authorization.",
              inputSchema={"type": "object", "properties": {
                  "method": {"type": "string", "enum": ["GET","POST","PUT","DELETE"]},
                  "path": {"type": "string", "description": "Relative path, e.g. /admin/accounts/47/groups"},
@@ -544,6 +551,11 @@ async def call_tool(name: str, arguments: dict):
     if name == "get_models":
         ok, data = await _req("GET", f"/admin/accounts/{a['id']}/models")
         return [TextContent(type="text", text=("Models:\n" + _fmt(data)) if ok else f"Query failed: {data}")]
+
+    if name == "admin_read":
+        path = a["path"] if a["path"].startswith("/") else "/" + a["path"]
+        ok, data = await _req("GET", path, params=a.get("params"), timeout=60.0)
+        return [TextContent(type="text", text=f"{'OK' if ok else 'ERROR'} GET {path}\n{_fmt(data) if ok else data}")]
 
     if name == "admin_request":
         method = a["method"].upper()
