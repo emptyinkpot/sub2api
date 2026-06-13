@@ -74,9 +74,10 @@
         "deploy/docker-compose*.yml",
         "deploy/install.sh",
         "deploy/docker-deploy.sh",
+        "deploy/install-datamanagementd.sh",
         "deploy/*.service"
       ],
-      "role": "upstream-compatible self-hosting notes and templates, not this fork's production authority",
+      "role": "upstream-compatible self-hosting notes, templates, installers, and service units; deploy/README.md owns the human instructions",
       "fate": "keep-demoted"
     }
   ],

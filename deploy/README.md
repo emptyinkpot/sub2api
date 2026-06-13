@@ -17,12 +17,10 @@ This directory contains files for deploying Sub2API on Linux servers.
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `.env.example` | Docker environment variables template |
-| `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `sub2api.service` | Systemd service unit file |
 | `sub2api-datamanagementd.service` | datamanagementd systemd service unit file |
-| `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 
 ---
@@ -150,11 +148,8 @@ SELECT
 
 ### datamanagementd（数据管理）联动
 
-如需启用管理后台“数据管理”功能，请额外部署宿主机 `datamanagementd`：
-
-- 主进程固定探测 `/tmp/sub2api-datamanagement.sock`
-- Docker 场景下需把宿主机 Socket 挂载到容器内同路径
-- 详细步骤见：`deploy/DATAMANAGEMENTD_CN.md`
+如需启用管理后台“数据管理”功能，请额外部署宿主机
+`datamanagementd`。见本文件的 `datamanagementd Host Service` 章节。
 
 ### Commands
 
@@ -611,3 +606,89 @@ gateway:
 **Cipher Suites (TLS 1.2):** `49195`, `49196`, `49199`, `49200` (ECDHE variants)
 
 **Curves:** `29` (X25519), `23` (P-256), `24` (P-384), `25` (P-521)
+
+---
+
+## Docker Image Reference
+
+Sub2API images are published for `linux/amd64` and `linux/arm64`.
+
+```bash
+docker run -d \
+  --name sub2api \
+  -p 8080:8080 \
+  -e DATABASE_URL="postgres://user:pass@host:5432/sub2api" \
+  -e REDIS_URL="redis://host:6379" \
+  weishaw/sub2api:latest
+```
+
+Common environment variables:
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes | - |
+| `REDIS_URL` | Redis connection string | Yes | - |
+| `PORT` | Server port | No | `8080` |
+| `GIN_MODE` | Gin framework mode (`debug`/`release`) | No | `release` |
+
+Common tags:
+
+- `latest` - latest stable release
+- `x.y.z` - specific version
+- `x.y` - latest patch of a minor version
+- `x` - latest minor of a major version
+
+## datamanagementd Host Service
+
+`datamanagementd` is an optional host-side data management service. The main
+process detects it through the fixed Unix socket
+`/tmp/sub2api-datamanagement.sock`; the admin data-management feature is
+enabled only when the socket is reachable and health checks pass.
+
+Build and install from source:
+
+```bash
+cd /opt/sub2api-src/datamanagement
+go build -o /opt/sub2api/datamanagementd ./cmd/datamanagementd
+
+mkdir -p /var/lib/sub2api/datamanagement
+chown -R sub2api:sub2api /var/lib/sub2api/datamanagement
+```
+
+Manual start example:
+
+```bash
+/opt/sub2api/datamanagementd \
+  -socket-path /tmp/sub2api-datamanagement.sock \
+  -sqlite-path /var/lib/sub2api/datamanagement/datamanagementd.db \
+  -version 1.0.0
+```
+
+Systemd setup:
+
+```bash
+sudo cp deploy/sub2api-datamanagementd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sub2api-datamanagementd
+sudo systemctl status sub2api-datamanagementd
+sudo journalctl -u sub2api-datamanagementd -f
+```
+
+Installer shortcuts:
+
+```bash
+sudo ./deploy/install-datamanagementd.sh --binary /path/to/datamanagementd
+sudo ./deploy/install-datamanagementd.sh --source /path/to/sub2api
+```
+
+When `sub2api` runs in Docker, mount the host socket into the container:
+
+```yaml
+services:
+  sub2api:
+    volumes:
+      - /tmp/sub2api-datamanagement.sock:/tmp/sub2api-datamanagement.sock
+```
+
+Backup tasks may require `pg_dump`, `redis-cli`, and `docker` depending on the
+configured source mode.
