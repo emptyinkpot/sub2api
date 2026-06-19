@@ -315,6 +315,8 @@ git cat-file -e "${TARGET_COMMIT}^{commit}"
 git reset --hard "$TARGET_COMMIT"
 git clean -fdx \
   -e .env \
+  -e backups \
+  -e backups/ \
   -e deploy/.env \
   -e deploy/data \
   -e deploy/postgres_data \
