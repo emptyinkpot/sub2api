@@ -13,6 +13,7 @@ param(
   [int]$TimeoutSec = 60,
   [int]$DeployTimeoutSec = 600,
   [int]$DeployPollIntervalSec = 5,
+  [string]$CcswitchDataRoot = $(if ($env:CCSWITCH_DATA_ROOT) { $env:CCSWITCH_DATA_ROOT } else { Join-Path $HOME ".cc-switch" }),
   [switch]$AllowNoChanges,
   [switch]$SkipLocalChecks
 )
@@ -145,6 +146,14 @@ function Resolve-Bash {
   $cmd = Get-Command bash -ErrorAction SilentlyContinue
   if (-not $cmd) {
     throw "bash is required to run scripts/check.sh. Install Git Bash or set SUB2API_BASH."
+  }
+  return $cmd.Source
+}
+
+function Resolve-Python {
+  $cmd = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $cmd) {
+    throw "python is required to audit the local CC Switch SQLite store. Install Python or make python available on PATH."
   }
   return $cmd.Source
 }
@@ -392,6 +401,200 @@ function Invoke-ReleaseAcceptance {
   ) -WorkingDirectory $RepoRoot
 }
 
+function Invoke-CcswitchBridgeAudit {
+  param([string]$RepoRoot)
+  $python = Resolve-Python
+  $resolvedBaseUrl = Resolve-BaseUrl
+  $script = @'
+import json
+import re
+import sqlite3
+import sys
+import urllib.request
+from pathlib import Path
+
+base_url = sys.argv[1].rstrip("/")
+ccswitch_root = Path(sys.argv[2])
+timeout_sec = float(sys.argv[3])
+
+settings_path = ccswitch_root / "settings.json"
+db_path = ccswitch_root / "cc-switch.db"
+
+if not settings_path.is_file():
+    raise SystemExit(f"missing CC Switch settings file: {settings_path}")
+if not db_path.is_file():
+    raise SystemExit(f"missing CC Switch database: {db_path}")
+
+settings = json.loads(settings_path.read_text(encoding="utf-8"))
+conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+conn.row_factory = sqlite3.Row
+
+def request_json(method, path, token=None, body=None):
+    data = None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(base_url + path, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+def mask_key(key):
+    if not key:
+        return ""
+    if len(key) <= 12:
+        return "***"
+    return f"{key[:6]}...{key[-4:]}"
+
+def normalized_url(value):
+    return (value or "").rstrip("/")
+
+def load_json(text):
+    return json.loads(text or "{}")
+
+def provider_secret(cfg, app_type):
+    if app_type == "claude":
+        return ((cfg.get("env") or {}).get("ANTHROPIC_AUTH_TOKEN") or "")
+    if app_type == "codex":
+        return ((cfg.get("auth") or {}).get("OPENAI_API_KEY") or "")
+    return ""
+
+def provider_points_to_base(row, cfg, app_type):
+    website_url = normalized_url(row["website_url"])
+    if website_url == base_url:
+        return True
+    if app_type == "claude":
+        return normalized_url((cfg.get("env") or {}).get("ANTHROPIC_BASE_URL")) == base_url
+    if app_type == "codex":
+        config_text = cfg.get("config") or ""
+        return f'base_url = "{base_url}"' in config_text or f"base_url='{base_url}'" in config_text
+    return False
+
+def matching_providers(app_type, platform, masked_keys):
+    rows = conn.execute(
+        "select id, app_type, name, settings_config, website_url, is_current from providers where app_type=? order by is_current desc, sort_index, created_at",
+        (app_type,),
+    ).fetchall()
+    matches = []
+    for row in rows:
+        cfg = load_json(row["settings_config"])
+        if not provider_points_to_base(row, cfg, app_type):
+            continue
+        secret = provider_secret(cfg, app_type)
+        masked = mask_key(secret)
+        matches.append({
+            "id": row["id"],
+            "name": row["name"],
+            "app_type": app_type,
+            "platform": platform,
+            "is_current": bool(row["is_current"]),
+            "masked_key": masked,
+            "key_matches_sub2api": masked in masked_keys,
+        })
+    return matches
+
+bootstrap = request_json("POST", "/api/v1/auth/bootstrap")
+token = ((bootstrap.get("data") or {}).get("access_token") or "")
+if not token:
+    raise SystemExit("sub2api auth/bootstrap did not return an access token")
+
+consumer_keys = request_json("GET", "/api/v1/admin/consumer-keys?limit=200", token=token)
+items = ((consumer_keys.get("data") or {}).get("items") or [])
+usable = [item for item in items if item.get("usable") is True]
+
+required = [
+    {"platform": "anthropic", "app_type": "claude", "label": "Claude"},
+    {"platform": "openai", "app_type": "codex", "label": "Codex"},
+]
+
+gaps = []
+bridge_report = []
+
+for requirement in required:
+    platform = requirement["platform"]
+    app_type = requirement["app_type"]
+    masked_keys = {item.get("masked_key") for item in usable if item.get("platform") == platform}
+    masked_keys.discard(None)
+    if not masked_keys:
+        gaps.append(f"sub2api has no usable downstream key for {requirement['label']} platform={platform}")
+        continue
+    matches = matching_providers(app_type, platform, masked_keys)
+    if not matches:
+        gaps.append(f"CC Switch has no {app_type} provider pointing to {base_url}")
+    elif not any(match["key_matches_sub2api"] for match in matches):
+        gaps.append(f"CC Switch {app_type} provider points to {base_url}, but its key does not match usable sub2api {platform} keys")
+    bridge_report.append({
+        "label": requirement["label"],
+        "platform": platform,
+        "app_type": app_type,
+        "sub2api_key_count": len(masked_keys),
+        "ccswitch_provider_count": len(matches),
+        "ccswitch_matching_providers": matches,
+    })
+
+current_checks = []
+for app_type, setting_key in (("claude", "currentProviderClaude"), ("codex", "currentProviderCodex")):
+    current_id = settings.get(setting_key)
+    if not current_id:
+        gaps.append(f"CC Switch settings missing {setting_key}")
+        continue
+    row = conn.execute(
+        "select id, name, is_current from providers where app_type=? and id=?",
+        (app_type, current_id),
+    ).fetchone()
+    if not row:
+        gaps.append(f"CC Switch current provider not found app={app_type} id={current_id}")
+        continue
+    current_checks.append({
+        "app_type": app_type,
+        "current_id": current_id,
+        "name": row["name"],
+        "is_current": bool(row["is_current"]),
+    })
+    if not row["is_current"]:
+        gaps.append(f"CC Switch settings {setting_key}={current_id} exists, but providers.is_current is not set")
+
+report = {
+    "status": "failed" if gaps else "passed",
+    "ccswitch_root": str(ccswitch_root),
+    "base_url": base_url,
+    "usable_sub2api_keys": [
+        {
+            "id": item.get("id"),
+            "name": item.get("name"),
+            "platform": item.get("platform"),
+            "group": item.get("group_name"),
+            "masked_key": item.get("masked_key"),
+        }
+        for item in usable
+    ],
+    "bridge_report": bridge_report,
+    "current_provider_checks": current_checks,
+    "gaps": gaps,
+}
+
+print(json.dumps(report, ensure_ascii=True, indent=2))
+if gaps:
+    raise SystemExit(1)
+'@
+
+  Write-Step "running local CC Switch bridge audit root=$CcswitchDataRoot baseUrl=$resolvedBaseUrl"
+  $oldErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = $script | & $python - $resolvedBaseUrl $CcswitchDataRoot ([string]$TimeoutSec) 2>&1
+  } finally {
+    $ErrorActionPreference = $oldErrorActionPreference
+  }
+  $text = ($output | Out-String).Trim()
+  if ($text) { Write-Step $text }
+  if ($LASTEXITCODE -ne 0) {
+    throw "local CC Switch bridge audit failed"
+  }
+}
+
 function Invoke-Sub2ApiAcceptance {
   $repoRoot = Get-RepoRoot
   Write-Step "repo root: $repoRoot"
@@ -400,6 +603,7 @@ function Invoke-Sub2ApiAcceptance {
   $targetCommit = Publish-CurrentRepo -RepoRoot $repoRoot
   Deploy-Sub2ApiRemote -TargetCommit $targetCommit
   Invoke-ReleaseAcceptance -RepoRoot $repoRoot -TargetCommit $targetCommit
+  Invoke-CcswitchBridgeAudit -RepoRoot $repoRoot
   Write-Host "SUB2API MANUAL DEPLOYMENT ACCEPTANCE PASS"
   [pscustomobject]@{
     BaseUrl = Resolve-BaseUrl
@@ -410,6 +614,7 @@ function Invoke-Sub2ApiAcceptance {
     DockerNetwork = $DockerNetwork
     CheckMode = $RequiredReleaseCheckMode
     ReleaseCoverage = ($RequiredReleaseChecks | ForEach-Object { $_.Name }) -join ","
+    CcswitchDataRoot = $CcswitchDataRoot
   } | Format-List
 }
 

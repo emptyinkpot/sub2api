@@ -210,6 +210,10 @@ check covers:
 - downstream model audit: every exposed model for usable consumer keys
 - upstream account audit: real upstream account/provider tests
 - routing audit: every consumer-key group has schedulable upstream accounts
+- local CC Switch bridge audit: the local `~/.cc-switch/settings.json` and
+  `cc-switch.db` must be readable, and CC Switch must contain Claude and Codex
+  providers pointing at the deployed Sub2API endpoint with keys matching usable
+  Sub2API downstream keys
 
 `scripts/check.sh` remains the smoke/audit owner. It is not the deploy
 orchestrator; `tests/run.ps1` is the only one-command push/deploy/check path for

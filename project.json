@@ -157,6 +157,17 @@
           "consumer-key-groups",
           "schedulable-upstream-accounts"
         ]
+      },
+      {
+        "id": "ccswitch-bridge",
+        "owner": "tests/run.ps1",
+        "surface": [
+          "local-ccswitch-settings",
+          "local-ccswitch-provider-db",
+          "sub2api-claude-key-vs-ccswitch-claude-provider",
+          "sub2api-codex-key-vs-ccswitch-codex-provider",
+          "current-provider-records"
+        ]
       }
     ],
     "requiresFinishedImage": true,
