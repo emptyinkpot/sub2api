@@ -200,6 +200,17 @@ HTTP smoke/audit phase to:
 scripts/check.sh --release --endpoint-only --base-url https://sub2api.tengokukk.com --expect-commit <sha> --full
 ```
 
+The deployment is accepted only when that full release check finishes. The full
+check covers:
+
+- downstream smoke: health, auth, model list, chat completion, stream
+  completion, and admin dashboard stats
+- downstream key audit: every usable consumer key through server-side real
+  gateway tests without exposing raw keys
+- downstream model audit: every exposed model for usable consumer keys
+- upstream account audit: real upstream account/provider tests
+- routing audit: every consumer-key group has schedulable upstream accounts
+
 `scripts/check.sh` remains the smoke/audit owner. It is not the deploy
 orchestrator; `tests/run.ps1` is the only one-command push/deploy/check path for
 this fork.

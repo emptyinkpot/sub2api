@@ -9,8 +9,6 @@ param(
   [string]$ImageRepository = $(if ($env:SUB2API_IMAGE_REPOSITORY) { $env:SUB2API_IMAGE_REPOSITORY } else { "sub2api" }),
   [string]$BindHost = $(if ($env:SUB2API_BIND_HOST) { $env:SUB2API_BIND_HOST } else { "0.0.0.0" }),
   [int]$HostPort = $(if ($env:SUB2API_HOST_PORT) { [int]$env:SUB2API_HOST_PORT } else { 8080 }),
-  [ValidateSet("full", "smoke", "audit-keys", "audit-models", "audit-upstream", "audit-routing")]
-  [string]$CheckMode = $(if ($env:SUB2API_CHECK_MODE) { $env:SUB2API_CHECK_MODE } else { "full" }),
   [string]$CommitMessage = "chore(sub2api): manual deployment acceptance",
   [int]$TimeoutSec = 60,
   [int]$DeployTimeoutSec = 600,
@@ -28,6 +26,35 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8NoBom
 [Console]::InputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
+
+$RequiredReleaseCheckMode = "full"
+$RequiredReleaseChecks = @(
+  [pscustomobject]@{
+    Name = "smoke"
+    Pattern = "run_module smoke.sh --full"
+    Coverage = "health, auth, downstream model list, downstream chat, stream, admin stats"
+  },
+  [pscustomobject]@{
+    Name = "downstream-keys"
+    Pattern = "run_module audit-keys.sh"
+    Coverage = "all usable downstream consumer keys through server-side real gateway tests"
+  },
+  [pscustomobject]@{
+    Name = "downstream-models"
+    Pattern = "run_module audit-models.sh"
+    Coverage = "every exposed downstream model for usable consumer keys"
+  },
+  [pscustomobject]@{
+    Name = "upstream-accounts"
+    Pattern = "run_module audit-upstream.sh"
+    Coverage = "real upstream account/provider tests"
+  },
+  [pscustomobject]@{
+    Name = "routing"
+    Pattern = "run_module audit-routing.sh"
+    Coverage = "downstream key groups have schedulable upstream accounts"
+  }
+)
 
 function Write-Step {
   param([string]$Message)
@@ -143,6 +170,29 @@ function Invoke-LocalChecks {
   }
 }
 
+function Assert-ReleaseAcceptanceCoverage {
+  param([string]$RepoRoot)
+  if ($env:SUB2API_CHECK_MODE -and $env:SUB2API_CHECK_MODE -ne $RequiredReleaseCheckMode) {
+    throw "tests/run.ps1 is the deploy acceptance entrypoint and always runs full upstream/downstream checks; remove SUB2API_CHECK_MODE=$($env:SUB2API_CHECK_MODE)."
+  }
+
+  $checkEntry = Join-Path $RepoRoot "scripts/check.sh"
+  if (-not (Test-Path -LiteralPath $checkEntry)) {
+    throw "release check owner is missing: $checkEntry"
+  }
+
+  $checkSource = [IO.File]::ReadAllText($checkEntry, $Utf8NoBom)
+  foreach ($check in $RequiredReleaseChecks) {
+    if (-not $checkSource.Contains($check.Pattern)) {
+      throw "scripts/check.sh --full no longer invokes required release check '$($check.Name)' with pattern '$($check.Pattern)'."
+    }
+  }
+}
+
+function Format-ReleaseCoverage {
+  return (($RequiredReleaseChecks | ForEach-Object { "$($_.Name): $($_.Coverage)" }) -join "; ")
+}
+
 function Publish-CurrentRepo {
   param([string]$RepoRoot)
   $branch = Get-GitBranch -RepoRoot $RepoRoot
@@ -159,7 +209,7 @@ function Publish-CurrentRepo {
       "target: sub2api manual deployment acceptance",
       "owner: tests/run.ps1",
       "patch: auto-stage current repository changes",
-      $(if ($SkipLocalChecks) { "test-not-run: -SkipLocalChecks" } else { "validate: project.json parse, git diff --check, focused backend unit checks" })
+      $(if ($SkipLocalChecks) { "test-not-run: -SkipLocalChecks" } else { "validate: project.json parse, git diff --check, release coverage assertion, focused backend unit checks" })
     )
     $args = @("commit", "-m", $CommitMessage)
     foreach ($line in $commitBody) {
@@ -176,7 +226,7 @@ function Publish-CurrentRepo {
       "-m", "target: sub2api manual deployment acceptance",
       "-m", "owner: tests/run.ps1",
       "-m", "patch: empty manual deployment marker",
-      "-m", $(if ($SkipLocalChecks) { "test-not-run: -SkipLocalChecks" } else { "validate: project.json parse, git diff --check, focused backend unit checks" })
+      "-m", $(if ($SkipLocalChecks) { "test-not-run: -SkipLocalChecks" } else { "validate: project.json parse, git diff --check, release coverage assertion, focused backend unit checks" })
     ) -RepoRoot $RepoRoot | Out-Null
   } else {
     Write-Step "no local changes; deploying current HEAD without an empty commit"
@@ -328,8 +378,9 @@ function Invoke-ReleaseAcceptance {
   )
   $bash = Resolve-Bash
   $resolvedBaseUrl = Resolve-BaseUrl
-  $modeArg = "--$CheckMode"
-  Write-Step "running release acceptance mode=$CheckMode commit=$TargetCommit baseUrl=$resolvedBaseUrl"
+  $modeArg = "--$RequiredReleaseCheckMode"
+  Write-Step "running full release acceptance commit=$TargetCommit baseUrl=$resolvedBaseUrl"
+  Write-Step "release coverage: $(Format-ReleaseCoverage)"
   Invoke-External -FilePath $bash -ArgumentList @(
     "scripts/check.sh",
     "--release",
@@ -345,6 +396,7 @@ function Invoke-Sub2ApiAcceptance {
   $repoRoot = Get-RepoRoot
   Write-Step "repo root: $repoRoot"
   Invoke-LocalChecks -RepoRoot $repoRoot
+  Assert-ReleaseAcceptanceCoverage -RepoRoot $repoRoot
   $targetCommit = Publish-CurrentRepo -RepoRoot $repoRoot
   Deploy-Sub2ApiRemote -TargetCommit $targetCommit
   Invoke-ReleaseAcceptance -RepoRoot $repoRoot -TargetCommit $targetCommit
@@ -356,7 +408,8 @@ function Invoke-Sub2ApiAcceptance {
     RemoteRepoRoot = $RemoteRepoRoot
     ContainerName = $ContainerName
     DockerNetwork = $DockerNetwork
-    CheckMode = $CheckMode
+    CheckMode = $RequiredReleaseCheckMode
+    ReleaseCoverage = ($RequiredReleaseChecks | ForEach-Object { $_.Name }) -join ","
   } | Format-List
 }
 

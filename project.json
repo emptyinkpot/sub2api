@@ -109,6 +109,56 @@
     "entrypoint": "tests/run.ps1",
     "canonicalCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/run.ps1",
     "delegatesTo": "scripts/check.sh --release --endpoint-only --expect-commit <sha> --full",
+    "requiredCheckMode": "full",
+    "requiredChecks": [
+      {
+        "id": "smoke",
+        "owner": "scripts/check/smoke.sh",
+        "surface": [
+          "health",
+          "auth",
+          "downstream-model-list",
+          "downstream-chat",
+          "stream",
+          "admin-dashboard-stats"
+        ]
+      },
+      {
+        "id": "downstream-keys",
+        "owner": "scripts/check/audit-keys.sh",
+        "surface": [
+          "consumer-key-list",
+          "server-side-key-test",
+          "downstream-model-list",
+          "downstream-chat"
+        ]
+      },
+      {
+        "id": "downstream-models",
+        "owner": "scripts/check/audit-models.sh",
+        "surface": [
+          "usable-consumer-keys",
+          "all-exposed-models",
+          "real-model-probes"
+        ]
+      },
+      {
+        "id": "upstream-accounts",
+        "owner": "scripts/check/audit-upstream.sh",
+        "surface": [
+          "provider-accounts",
+          "real-upstream-account-tests"
+        ]
+      },
+      {
+        "id": "routing",
+        "owner": "scripts/check/audit-routing.sh",
+        "surface": [
+          "consumer-key-groups",
+          "schedulable-upstream-accounts"
+        ]
+      }
+    ],
     "requiresFinishedImage": true,
     "forbids": [
       "source dev server",

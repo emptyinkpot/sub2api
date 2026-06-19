@@ -30,10 +30,11 @@ usage() {
 Usage:
   scripts/check.sh --release [--full|--smoke|--audit-keys|--audit-models|--audit-upstream|--audit-routing] [options]
 
-Release acceptance for the Coolify-deployed server image. With
---coolify-resource-uuid it resolves the Coolify env/image on the deployment
-host, starts the finished image as a temporary container, and runs real HTTP
-checks against that candidate. It never starts source dev servers, mocks, or
+Release acceptance for the deployed server image. For this fork, tests/run.ps1
+owns the manual SSH deployment and calls this script with --endpoint-only,
+--expect-commit, and --full against the public production endpoint. Legacy
+Coolify candidate-image options remain for diagnostics, not as this fork's
+deployment authority. This script never starts source dev servers, mocks, or
 dry runs.
 
 Examples:
@@ -43,15 +44,15 @@ Examples:
 
 Options:
   --base-url URL       Deployed app URL, default https://sub2api.tengokukk.com
-  --remote-host HOST   SSH host that runs the Coolify application
+  --remote-host HOST   SSH host that runs the legacy Coolify diagnostic candidate
   --coolify-resource-uuid UUID
-                       Coolify application UUID; required for release authority
+                       Coolify application UUID; legacy diagnostic candidate mode
   --image IMAGE        Candidate image to run; defaults to current Coolify image
   --release-network N  Docker network for the candidate, default coolify
   --remote-port PORT   Remote loopback port for candidate HTTP; default auto
   --local-port PORT    Local loopback port for SSH tunnel; default auto
   --keep-container     Leave the temporary candidate container running
-  --endpoint-only      Only check an already exposed endpoint; not release-authoritative
+  --endpoint-only      Check the already exposed endpoint after tests/run.ps1 manual SSH deployment
   --timeout SEC        Per-request timeout passed to check modules, default 45
   --wait-timeout SEC   Seconds to wait for deployed /health, default 180
   --wait-interval SEC  Poll interval while waiting for /health, default 5
@@ -474,8 +475,7 @@ require_bin curl
 require_bin jq
 
 if [ "$ENDPOINT_ONLY" -eq 0 ] && [ -z "$COOLIFY_RESOURCE_UUID" ]; then
-  echo "--release is image acceptance and requires --coolify-resource-uuid." >&2
-  echo "Use --endpoint-only only for temporary legacy HTTP checks; it is not release-authoritative." >&2
+  echo "--release requires --endpoint-only after tests/run.ps1 manual SSH deployment, or legacy --coolify-resource-uuid diagnostic mode." >&2
   exit 2
 fi
 

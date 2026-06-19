@@ -24,7 +24,7 @@ usage() {
 '' \
 'Modes:' \
 '  --smoke           Deployment acceptance; default when no mode is provided' \
-'  --release         Release acceptance against the deployed server image' \
+'  --release         Release acceptance against the deployed manual-SSH server image' \
 '  --audit-keys      Audit all downstream consumer keys' \
 '  --audit-models    Audit every exposed downstream model' \
 '  --audit-upstream  Audit all upstream accounts/providers' \
@@ -33,7 +33,7 @@ usage() {
 '' \
 'Examples:' \
 '  scripts/check.sh' \
-'  scripts/check.sh --release --remote-host rainyun --coolify-resource-uuid <uuid> --full' \
+'  scripts/check.sh --release --endpoint-only --base-url https://sub2api.tengokukk.com --expect-commit <sha> --full' \
 '  scripts/check.sh --smoke --full' \
 '  scripts/check.sh --audit-keys --models-only' \
 '  scripts/check.sh --audit-models --model-filter gpt-5' \
@@ -42,7 +42,7 @@ usage() {
 '  scripts/check.sh --full --base-url https://sub2api.tengokukk.com' \
 '' \
 'Notes:' \
-'  --release validates the Coolify-built server image; use --endpoint-only only for legacy diagnostics.' \
+'  --release validates the deployed server image; tests/run.ps1 owns manual SSH deployment for this fork.' \
 '  --full at top level means "run every check module" and report aggregate failures.' \
 '  To run the full smoke profile only, use: scripts/check.sh --smoke --full' \
 '  Top-level --full accepts only options shared by every module: --base-url and --timeout.'
