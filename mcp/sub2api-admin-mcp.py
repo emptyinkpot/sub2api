@@ -29,7 +29,8 @@ TOKEN = os.environ.get("SUB2API_ADMIN_TOKEN", "")
 MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
 MCP_PORT = int(os.environ.get("MCP_PORT", "8765"))
 DEPLOY_REMOTE_HOST = os.environ.get("SUB2API_DEPLOY_REMOTE_HOST", "server-170")
-COOLIFY_RESOURCE_UUID = os.environ.get("SUB2API_COOLIFY_RESOURCE_UUID", "m7tduvm4nqte1352aeu5qn2n")
+DEPLOY_REMOTE_ROOT = os.environ.get("SUB2API_DEPLOY_REMOTE_ROOT", "/srv/sub2api")
+DEPLOY_CONTAINER_NAME = os.environ.get("SUB2API_DEPLOY_CONTAINER_NAME", "sub2api")
 GITHUB_REPO = os.environ.get("SUB2API_GITHUB_REPO", "emptyinkpot/sub2api")
 GITHUB_BRANCH = os.environ.get("SUB2API_GITHUB_BRANCH", "integration/upstream-rebase")
 MAX_TEXT = 6000
@@ -92,15 +93,15 @@ def _deployment_target() -> dict:
     return {
         "github_repo": GITHUB_REPO,
         "github_branch": GITHUB_BRANCH,
+        "deployment_authority": "manual-ssh",
         "remote_host": DEPLOY_REMOTE_HOST,
-        "coolify_resource_uuid": COOLIFY_RESOURCE_UUID,
+        "remote_root": DEPLOY_REMOTE_ROOT,
+        "container_name": DEPLOY_CONTAINER_NAME,
         "public_base_url": _service_base_url(),
         "release_acceptance": (
-            "scripts/check.sh --release "
-            f"--remote-host {DEPLOY_REMOTE_HOST} "
-            f"--coolify-resource-uuid {COOLIFY_RESOURCE_UUID} --full"
+            "powershell -NoProfile -ExecutionPolicy Bypass -File tests/run.ps1"
         ),
-        "mutation_boundary": "read-only; deploy triggering remains owned by Coolify/release tooling",
+        "mutation_boundary": "read-only; deployment mutation is owned by tests/run.ps1 manual SSH tooling",
     }
 
 

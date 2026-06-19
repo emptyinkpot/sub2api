@@ -116,7 +116,9 @@ backend/.installed
 # ===================
 # 其他
 # ===================
-tests
+tests/*
+!tests/
+!tests/run.ps1
 CLAUDE.md
 .claude
 scripts

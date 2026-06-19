@@ -173,25 +173,36 @@ For this fork, production deployment is source-controlled through:
 ```text
 E:\My Project\sub2api
   -> https://github.com/emptyinkpot/sub2api
-  -> Coolify builds the root Dockerfile
-  -> server runs the finished Docker image
+  -> tests/run.ps1 pushes the selected commit
+  -> server-170 builds the root Dockerfile over SSH
+  -> server-170 runs the rebuilt Docker image
 ```
 
 The source repository is canonical; deployment servers must not be treated as a
-second source checkout. Coolify owns production image build and runtime env
-injection. Do not qualify a release by running a source dev server, mock
-provider, dry run, or host-local rebuild script.
+second source checkout. `tests/run.ps1` owns the push, manual SSH deployment,
+and release acceptance orchestration. Do not qualify a release by running a
+source dev server, mock provider, dry run, or an ad hoc host-local deployment
+script outside this entrypoint.
 
-Release acceptance is owned by the single check entrypoint:
+Push, deploy, and release acceptance are owned by the single test entrypoint:
 
-```bash
-scripts/check.sh --release --remote-host server-170 --coolify-resource-uuid m7tduvm4nqte1352aeu5qn2n --full
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/run.ps1
 ```
 
-This starts or selects the finished Coolify image with the remote Coolify
-application `.env`, verifies source/image identity, and runs real HTTP smoke
-and audit checks. `--endpoint-only` is for temporary diagnostics only and is
-not release-authoritative.
+The script runs local checks, commits/pushes the current branch, SSHes to
+`server-170`, checks out the pushed commit under `/srv/sub2api`, builds the root
+`Dockerfile`, replaces the `sub2api` container while preserving the existing
+production container environment, waits for `/health`, and then delegates the
+HTTP smoke/audit phase to:
+
+```bash
+scripts/check.sh --release --endpoint-only --base-url https://sub2api.tengokukk.com --expect-commit <sha> --full
+```
+
+`scripts/check.sh` remains the smoke/audit owner. It is not the deploy
+orchestrator; `tests/run.ps1` is the only one-command push/deploy/check path for
+this fork.
 
 The machine-readable minimum owner set lives in `project.json` under
 `minimalFileGroups`; keep README as a projection, not a second registry.

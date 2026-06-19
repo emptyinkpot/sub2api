@@ -12,6 +12,7 @@
   "readOrder": [
     "README.md",
     "project.json",
+    "tests/run.ps1",
     "scripts/check.sh",
     "deploy/ops/README.md"
   ],
@@ -46,16 +47,17 @@
       "paths": [
         "Dockerfile"
       ],
-      "role": "Coolify production image build entrypoint",
+      "role": "manual SSH production image build entrypoint",
       "fate": "keep-canonical"
     },
     {
       "owner": "validation",
       "paths": [
+        "tests/run.ps1",
         "scripts/check.sh",
         "scripts/check/"
       ],
-      "role": "release acceptance and smoke/audit checks",
+      "role": "one-command push/deploy/check entrypoint plus release smoke/audit checks",
       "fate": "keep-canonical"
     },
     {
@@ -89,39 +91,43 @@
     "branch": "integration/upstream-rebase"
   },
   "productionDeployment": {
-    "authority": "Coolify",
-    "serverRuns": "finished Docker image",
+    "authority": "manual-ssh",
+    "serverRuns": "Docker image built from the root Dockerfile on the production host",
     "dockerfile": "Dockerfile",
     "defaultTarget": "final",
     "appTarget": "app",
     "mcpTarget": "mcp",
     "releaseTarget": "goreleaser",
-    "coolifyResourceUuid": "m7tduvm4nqte1352aeu5qn2n",
     "remoteHost": "server-170",
-    "runtimeRoot": "/data/coolify/applications/{coolifyResourceUuid}",
-    "envSource": "Coolify application .env"
+    "runtimeRoot": "/srv/sub2api",
+    "containerName": "sub2api",
+    "dockerNetwork": "sub2api-network",
+    "dataDir": "/srv/sub2api/deploy/data",
+    "envSource": "existing production container environment captured during tests/run.ps1 deployment"
   },
   "releaseAcceptance": {
-    "entrypoint": "scripts/check.sh",
-    "canonicalCommand": "scripts/check.sh --release --remote-host <host> --coolify-resource-uuid <uuid> --full",
+    "entrypoint": "tests/run.ps1",
+    "canonicalCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/run.ps1",
+    "delegatesTo": "scripts/check.sh --release --endpoint-only --expect-commit <sha> --full",
     "requiresFinishedImage": true,
     "forbids": [
       "source dev server",
       "mock provider",
       "dryRun",
-      "host-local checkout rebuild",
-      "manual /srv/sub2api deployment script"
+      "host-local checkout rebuild outside tests/run.ps1",
+      "ad hoc /srv/sub2api deployment script"
     ]
   },
   "configurationSurfaces": [
-    "Coolify application .env",
+    "production container environment",
+    "/srv/sub2api/deploy/data",
     "deploy/.env.example",
     "deploy/docker-compose*.yml"
   ],
   "secretSurfaces": [
-    "Coolify application .env",
-    "C:\\Users\\ASUS-KL\\.codex-secrets\\sub2api",
-    "C:\\Users\\ASUS-KL\\.codex-secrets\\coolify"
+    "production container environment",
+    "/srv/sub2api/deploy/data",
+    "C:\\Users\\ASUS-KL\\.codex-secrets\\sub2api"
   ],
   "ownershipBoundary": {
     "owns": [
@@ -132,18 +138,18 @@
       "release acceptance for Sub2API images"
     ],
     "consumes": [
-      "Coolify build/deploy",
+      "server-170 Docker",
       "PostgreSQL",
       "Redis",
       "upstream AI providers"
     ],
     "forbids": [
       "treating deployment hosts as source of truth",
-      "manual deploy-image-170.sh path",
+      "manual deploy-image-170.sh path outside tests/run.ps1",
       "plaintext secrets in repository files"
     ]
   },
-  "status": "coolify-production-active",
+  "status": "manual-ssh-production-active",
   "publicBaseUrl": "https://sub2api.tengokukk.com",
   "publicHealthPath": "/health"
 }
