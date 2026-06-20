@@ -20,12 +20,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/coze"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/dashscope"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/moonshot"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/glm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
@@ -700,36 +696,6 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Account deleted successfully"})
 }
 
-// Clone handles creating a copied account from an existing account.
-// POST /api/v1/admin/accounts/:id/clone
-func (h *AccountHandler) Clone(c *gin.Context) {
-	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid account ID")
-		return
-	}
-
-	result, err := executeAdminIdempotent(c, "admin.accounts.clone", gin.H{"account_id": accountID}, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
-		account, execErr := h.adminService.CloneAccount(ctx, accountID)
-		if execErr != nil {
-			return nil, execErr
-		}
-		return h.buildAccountResponseWithRuntime(ctx, account), nil
-	})
-	if err != nil {
-		if retryAfter := service.RetryAfterSecondsFromError(err); retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	if result != nil && result.Replayed {
-		c.Header("X-Idempotency-Replayed", "true")
-	}
-	response.Success(c, result.Data)
-}
-
 // TestAccountRequest represents the request body for testing an account
 type TestAccountRequest struct {
 	ModelID string `json:"model_id"`
@@ -1164,6 +1130,21 @@ func (h *AccountHandler) ClearError(c *gin.Context) {
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+// RevertProxyFallback handles reverting account proxy to original before fallback.
+// POST /api/v1/admin/accounts/:id/revert-proxy-fallback
+func (h *AccountHandler) RevertProxyFallback(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if err := h.adminService.RevertAccountProxyFallback(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "reverted"})
 }
 
 // BatchClearError handles batch clearing account errors
@@ -1612,46 +1593,6 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 	response.Success(c, result)
 }
 
-// PreviewProxyAssignment previews automatic proxy assignment/rebalance for accounts.
-// POST /api/v1/admin/accounts/proxy-assignment/preview
-func (h *AccountHandler) PreviewProxyAssignment(c *gin.Context) {
-	var req service.ProxyAssignmentInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-	if len(req.AccountIDs) == 0 && req.Filters == nil {
-		response.BadRequest(c, "account_ids or filters is required")
-		return
-	}
-	plan, err := h.adminService.PreviewProxyAssignment(c.Request.Context(), &req)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, plan)
-}
-
-// ApplyProxyAssignment applies an automatic proxy assignment/rebalance plan.
-// POST /api/v1/admin/accounts/proxy-assignment/apply
-func (h *AccountHandler) ApplyProxyAssignment(c *gin.Context) {
-	var req service.ProxyAssignmentInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-	if len(req.AccountIDs) == 0 && req.Filters == nil {
-		response.BadRequest(c, "account_ids or filters is required")
-		return
-	}
-	result, err := h.adminService.ApplyProxyAssignment(c.Request.Context(), &req)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
 func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *service.BulkUpdateAccountFilters {
 	if filters == nil {
 		return nil
@@ -2036,120 +1977,6 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.NotFound(c, "Account not found")
-		return
-	}
-
-	// Handle GLM accounts before the generic OpenAI-compatible branch so the
-	// test modal shows GLM models instead of OpenAI defaults.
-	if account.Platform == service.PlatformGLM {
-		mapping := account.GetModelMapping()
-		if len(mapping) == 0 {
-			response.Success(c, glm.DefaultModels)
-			return
-		}
-
-		var models []glm.Model
-		for requestedModel := range mapping {
-			var found bool
-			for _, dm := range glm.DefaultModels {
-				if dm.ID == requestedModel {
-					models = append(models, dm)
-					found = true
-					break
-				}
-			}
-			if !found {
-				models = append(models, glm.Model{
-					ID:          requestedModel,
-					Object:      "model",
-					Type:        "model",
-					DisplayName: requestedModel,
-				})
-			}
-		}
-		response.Success(c, models)
-		return
-	}
-
-	if account.Platform == service.PlatformCoze {
-		mapping := account.GetModelMapping()
-		if len(mapping) == 0 {
-			response.Success(c, coze.DefaultModels)
-			return
-		}
-
-		var models []coze.Model
-		for requestedModel := range mapping {
-			var found bool
-			for _, dm := range coze.DefaultModels {
-				if dm.ID == requestedModel {
-					models = append(models, dm)
-					found = true
-					break
-				}
-			}
-			if !found {
-				models = append(models, coze.Model{
-					ID:          requestedModel,
-					Object:      "model",
-					Type:        "model",
-					DisplayName: requestedModel,
-				})
-			}
-		}
-		response.Success(c, models)
-		return
-	}
-
-	baseURL := strings.ToLower(strings.TrimSpace(account.GetCredential("base_url")))
-	if strings.Contains(baseURL, "dashscope") {
-		mapping := account.GetModelMapping()
-		if len(mapping) == 0 {
-			response.Success(c, dashscope.DefaultModels)
-			return
-		}
-		var models []dashscope.Model
-		for requestedModel := range mapping {
-			var found bool
-			for _, dm := range dashscope.DefaultModels {
-				if dm.ID == requestedModel {
-					models = append(models, dm)
-					found = true
-					break
-				}
-			}
-			if !found {
-				models = append(models, dashscope.Model{
-					ID: requestedModel, Object: "model", OwnedBy: "dashscope", Type: "model", DisplayName: requestedModel,
-				})
-			}
-		}
-		response.Success(c, models)
-		return
-	}
-	if strings.Contains(baseURL, "moonshot") || strings.Contains(baseURL, "kimi") {
-		mapping := account.GetModelMapping()
-		if len(mapping) == 0 {
-			response.Success(c, moonshot.DefaultModels)
-			return
-		}
-		var models []moonshot.Model
-		for requestedModel := range mapping {
-			var found bool
-			for _, dm := range moonshot.DefaultModels {
-				if dm.ID == requestedModel {
-					models = append(models, dm)
-					found = true
-					break
-				}
-			}
-			if !found {
-				models = append(models, moonshot.Model{
-					ID: requestedModel, Object: "model", OwnedBy: "moonshot", Type: "model", DisplayName: requestedModel,
-				})
-			}
-		}
-		response.Success(c, models)
 		return
 	}
 
